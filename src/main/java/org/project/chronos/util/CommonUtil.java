@@ -1,0 +1,32 @@
+package org.project.chronos.util;
+
+import grpc.chronos.executor.ChronosTask;
+import lombok.SneakyThrows;
+import lombok.extern.slf4j.Slf4j;
+import org.project.chronos.model.ChronosTaskMessage;
+import tools.jackson.databind.ObjectMapper;
+
+@Slf4j
+public class CommonUtil {
+
+    @SneakyThrows
+    public static <T> T mapStringToObject(String objString, Class<T> classType) {
+        ObjectMapper objectMapper = new ObjectMapper();
+        return objectMapper.readValue(objString, classType);
+    }
+
+    @SneakyThrows
+    public static String mapObjectToString(Object object) {
+        ObjectMapper objectMapper = new ObjectMapper();
+        return objectMapper.writeValueAsString(object);
+    }
+
+    public static grpc.chronos.executor.ChronosTask createScrapingTaskRequest(ChronosTaskMessage task) {
+
+        return ChronosTask.newBuilder()
+                .setTaskAvailable(true)
+                .setTaskId(task.getTaskId())
+                .setTaskData(task.getChronosTask().getTaskMetadata())
+                .build();
+    }
+}

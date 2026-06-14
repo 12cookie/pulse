@@ -1,0 +1,29 @@
+syntax = "proto3";
+
+option java_multiple_files = true;
+option java_package = "grpc.chronos.executor";
+
+message GetTaskRequest {
+  string taskExecutorClientId = 1;
+}
+
+message ChronosTask {
+  bool taskAvailable = 1;
+  string taskId = 2;
+  string taskData = 3;
+}
+
+message ResultSubmissionRequest {
+  string taskId = 1;
+  string resultData = 2;
+}
+
+message ResultAcknowledgment {
+  string message = 1;
+}
+
+service ChronosTaskExecutorService {
+  rpc getTask(GetTaskRequest) returns (ChronosTask);
+  rpc submitTaskResult(ResultSubmissionRequest) returns (ResultAcknowledgment);
+}
+
