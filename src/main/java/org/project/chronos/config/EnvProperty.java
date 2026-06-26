@@ -41,9 +41,6 @@ public class EnvProperty {
     @Value("${kafka.max.poll.interval.ms:300000}")
     private String kafkaMaxPollInterval;
 
-    @Value("${spring.kafka.producer.transaction-id-prefix:chronos-transaction}")
-    private String kafkaTransactionIdPrefix;
-
     @Value("${spring.kafka.consumer.bootstrap-servers}")
     private String consumerBootstrapServers;
 
@@ -71,6 +68,9 @@ public class EnvProperty {
     @Value("${spring.kafka.producer.retry.backoff.ms:15000}")
     private int producerRetryBackoffMs;
 
+    @Value("${spring.kafka.producer.delivery.timeout.ms:120000}")
+    private int producerDeliveryTimeoutMs;
+
     @Value("${chronos.process.initiation.topic:CHRONOS.PROCESS.INITIATION.TOPIC}")
     private String chronosProcessInitiationTopic;
 
@@ -88,6 +88,12 @@ public class EnvProperty {
 
     @Value("${raft.logs.storage.path:./}")
     private String storagePath;
+
+    @Value("${raft.client.rpc.retry.count:3}")
+    private int rpcClientRetryCount;
+
+    @Value("${raft.client.rpc.retry.interval:1}")
+    private int rpcClientRetryInterval;
 
     @Value("${raft.client.rpc.request.timeout.ms:3000}")
     private int rpcClientRequestTimeout;
@@ -125,4 +131,3 @@ public class EnvProperty {
     @Value("${raft.storage.directory.delete.on-startup:false}")
     private boolean directoryDeletionEnabled;
 }
-

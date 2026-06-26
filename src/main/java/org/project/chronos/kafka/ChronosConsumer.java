@@ -61,12 +61,12 @@ public class ChronosConsumer {
             MDC.put("refId", consumerRecord.key());
             chronosTaskManager.addTaskToQueue(consumerRecord.value());
             log.info("Message consumed - key: {}, topic: {}", consumerRecord.key(), consumerRecord.topic());
-        } catch (Exception e) {
-            log.error("Error while consuming message", e);
+        } catch (IOException e) {
+            log.error("Error occurred while consuming message", e);
             throw new RuntimeException(e);
         } finally {
-            acknowledgment.acknowledge();
             MDC.clear();
+            acknowledgment.acknowledge();
         }
     }
 

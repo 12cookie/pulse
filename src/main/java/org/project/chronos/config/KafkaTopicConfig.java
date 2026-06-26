@@ -29,6 +29,11 @@ public class KafkaTopicConfig implements ChronosConstants {
     @Bean
     public NewTopics smartQCTopics() {
         return new NewTopics(
+                TopicBuilder.name(envProperty.getChronosProcessInitiationTopic())
+                        .partitions(envProperty.getNumberOfPartition())
+                        .replicas(envProperty.getNumberOfReplica())
+                        .config(TopicConfig.RETENTION_MS_CONFIG, String.valueOf(envProperty.getRetentionPeriodMs()))
+                        .build(),
                 TopicBuilder.name(envProperty.getChronosProcessCompletionTopic())
                         .partitions(envProperty.getNumberOfPartition())
                         .replicas(envProperty.getNumberOfReplica())

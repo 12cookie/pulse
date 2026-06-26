@@ -33,7 +33,7 @@ import static org.project.chronos.constants.ChronosConstants.*;
 
 @Slf4j
 @Configuration
-@ConditionalOnProperty(name = "smart.qc.enable.raft", havingValue = "true")
+@ConditionalOnProperty(name = "enable.raft", havingValue = "true")
 public class RaftJobServer {
 
     public static RaftGroupId RAFT_GROUP_ID = RaftGroupId.valueOf(UUID.nameUUIDFromBytes(RAFT_GROUP.getBytes()));

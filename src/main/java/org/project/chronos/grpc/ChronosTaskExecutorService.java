@@ -25,5 +25,4 @@ public class ChronosTaskExecutorService extends ChronosTaskExecutorServiceGrpc.C
         responseObserver.onNext(taskManager.submitTaskResult(request));
         responseObserver.onCompleted();
     }
-
 }

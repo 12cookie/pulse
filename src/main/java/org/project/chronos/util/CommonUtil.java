@@ -9,15 +9,15 @@ import tools.jackson.databind.ObjectMapper;
 @Slf4j
 public class CommonUtil {
 
+    private static final ObjectMapper objectMapper = new ObjectMapper();
+
     @SneakyThrows
     public static <T> T mapStringToObject(String objString, Class<T> classType) {
-        ObjectMapper objectMapper = new ObjectMapper();
         return objectMapper.readValue(objString, classType);
     }
 
     @SneakyThrows
     public static String mapObjectToString(Object object) {
-        ObjectMapper objectMapper = new ObjectMapper();
         return objectMapper.writeValueAsString(object);
     }
 

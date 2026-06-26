@@ -14,6 +14,8 @@ public interface TaskFlowHandler {
 
     Optional<AssignedTaskWrapper> getAssignedTask(String taskId);
 
+    void removeTaskFromMap(long key);
+
     int getQueueSize() throws IOException;
 
     boolean isLeaderElected();

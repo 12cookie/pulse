@@ -9,6 +9,8 @@ import org.apache.ratis.client.RaftClientConfigKeys;
 import org.apache.ratis.conf.RaftProperties;
 import org.apache.ratis.protocol.*;
 import org.apache.ratis.protocol.exceptions.AlreadyClosedException;
+import org.apache.ratis.retry.RetryPolicies;
+import org.apache.ratis.retry.RetryPolicy;
 import org.apache.ratis.util.TimeDuration;
 import org.project.chronos.config.EnvProperty;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -27,7 +29,7 @@ import static org.project.chronos.raft.server.RaftJobServer.RAFT_GROUP_ID;
 @Slf4j
 @Getter
 @Service
-@ConditionalOnProperty(name = "smart.qc.enable.raft", havingValue = "true")
+@ConditionalOnProperty(name = "enable.raft", havingValue = "true")
 public final class RaftJobClient implements Closeable {
 
     @Autowired
@@ -53,14 +55,17 @@ public final class RaftJobClient implements Closeable {
                 })
                 .collect(Collectors.toList());
 
+        RetryPolicy retryPolicy = RetryPolicies.retryUpToMaximumCountWithFixedSleep(
+                envProperty.getRpcClientRetryCount(),
+                TimeDuration.valueOf(envProperty.getRpcClientRetryInterval(), TimeUnit.SECONDS));
         RaftProperties properties = new RaftProperties();
         RaftGroup raftGroup = RaftGroup.valueOf(RAFT_GROUP_ID, peers);
         RaftClientConfigKeys.Rpc.setRequestTimeout(properties, TimeDuration.valueOf(envProperty.getRpcClientRequestTimeout(), TimeUnit.MILLISECONDS));
-
         this.close();
         client = RaftClient.newBuilder()
                 .setProperties(properties)
                 .setRaftGroup(raftGroup)
+                .setRetryPolicy(retryPolicy)
                 .setClientId(ClientId.randomId())
                 .build();
     }
@@ -69,9 +74,7 @@ public final class RaftJobClient implements Closeable {
         try {
             return client.io().send(Message.valueOf(command));
         } catch (Exception e) {
-            handleException(e);
-            return client.io().send(Message.valueOf(command));
-
+            throw new IOException("Failed to send command: " + command, e);
         }
     }
 
@@ -79,11 +82,11 @@ public final class RaftJobClient implements Closeable {
         try {
             return client.io().sendReadOnly(Message.valueOf(query));
         } catch (Exception e) {
-            handleException(e);
-            return client.io().sendReadOnly(Message.valueOf(query));
+            throw new IOException("Failed to send query: " + query, e);
         }
     }
 
+    @SuppressWarnings("unused")
     private void handleException(Exception e) throws IOException {
 
         if (e instanceof AlreadyClosedException) {
@@ -105,7 +108,6 @@ public final class RaftJobClient implements Closeable {
 
     @PreDestroy
     public void close() {
-
         RaftClient oldClient = this.client;
         this.client = null;
         if (oldClient != null) {

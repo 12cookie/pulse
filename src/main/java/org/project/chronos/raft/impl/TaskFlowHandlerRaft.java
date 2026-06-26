@@ -24,7 +24,7 @@ import static org.project.chronos.constants.ChronosConstants.*;
 
 @Slf4j
 @Service
-@ConditionalOnProperty(name = "smart.qc.enable.raft", havingValue = "true")
+@ConditionalOnProperty(name = "enable.raft", havingValue = "true")
 public class TaskFlowHandlerRaft implements TaskFlowHandler {
 
     @Autowired
@@ -47,8 +47,8 @@ public class TaskFlowHandlerRaft implements TaskFlowHandler {
         }
 
         String jobListString = CommonUtil.mapObjectToString(chronosTaskMessage);
-        RaftClientReply reply = raftClient.sendCommand(ADD_TASK_TO_QUEUE + COLON + jobListString);
-        log.debug("Reply for command {}: {}", ADD_TASK_TO_QUEUE, reply.getMessage().getContent().toStringUtf8());
+        RaftClientReply reply = raftClient.sendCommand(ADD_TASK_TO_QUEUE.concat(COLON).concat(jobListString));
+        log.info("Reply for command {}: {}", ADD_TASK_TO_QUEUE, reply.getMessage().getContent().toStringUtf8());
     }
 
     @Override
@@ -60,7 +60,7 @@ public class TaskFlowHandlerRaft implements TaskFlowHandler {
         try {
             RaftClientReply reply = raftClient.sendCommand(GET_PENDING_TASK.concat(COLON).concat(taskExecutorClientId));
             String commandResponse = reply.getMessage().getContent().toStringUtf8();
-            log.debug("Reply for command {}: {}", GET_PENDING_TASK, commandResponse);
+            log.info("Reply for command {}: {}", GET_PENDING_TASK, commandResponse);
 
             if (Objects.equals(commandResponse, NO_PENDING_JOB)) return Optional.empty();
             ChronosTaskMessage chronosTaskMessage = CommonUtil.mapStringToObject(
@@ -77,11 +77,11 @@ public class TaskFlowHandlerRaft implements TaskFlowHandler {
 
     @Override
     public Optional<AssignedTaskWrapper> getAssignedTask(String taskId) {
-        String command = GET_ASSIGNED_TASK_FROM_MAP.concat(COLON).concat(taskId);
+        String query = GET_ASSIGNED_TASK_FROM_MAP.concat(COLON).concat(taskId);
         try {
-            RaftClientReply reply = raftClient.sendCommand(command);
+            RaftClientReply reply = raftClient.sendQuery(query);
             String commandResponse = reply.getMessage().getContent().toStringUtf8();
-            log.debug("Reply for command {}: {}", GET_ASSIGNED_TASK_FROM_MAP, commandResponse);
+            log.info("Reply for query {}: {}", GET_ASSIGNED_TASK_FROM_MAP, commandResponse);
             if (Objects.equals(commandResponse, NO_TASK_FOUND_IN_MAP)) {
                 return Optional.empty();
             }
@@ -91,6 +91,18 @@ public class TaskFlowHandlerRaft implements TaskFlowHandler {
             // TODO: Handle exception
             log.error("Error while getting job by refId through state machine: {}", ex.getLocalizedMessage());
             return Optional.empty();
+        }
+    }
+
+    @Override
+    public void removeTaskFromMap(long key) {
+        String command = REMOVE_TASK_FROM_MAP.concat(COLON).concat(String.valueOf(key));
+        try {
+            RaftClientReply reply = raftClient.sendCommand(command);
+            String commandResponse = reply.getMessage().getContent().toStringUtf8();
+            log.info("Reply for command {}: {}", REMOVE_TASK_FROM_MAP, commandResponse);
+        } catch (IOException ex) {
+            log.warn("Error while getting job through state machine: {}", ex.getLocalizedMessage());
         }
     }
 
@@ -109,7 +121,7 @@ public class TaskFlowHandlerRaft implements TaskFlowHandler {
                 throw new IOException("Received INVALID_QUERY response from Raft state machine");
             }
 
-            log.debug("Pending queue size: {}", Integer.parseInt(queryReply));
+            log.info("Pending queue size: {}", Integer.parseInt(queryReply));
             return Integer.parseInt(queryReply);
         } catch (IOException e) {
             // TODO: HANDLE EXCEPTION
@@ -148,7 +160,7 @@ public class TaskFlowHandlerRaft implements TaskFlowHandler {
                     .concat(COLON)
                     .concat(String.valueOf(envProperty.getTaskTimeoutMs()));
             RaftClientReply reply = raftClient.sendCommand(command);
-            log.debug("Handle expired tasks reply: {}", reply.getMessage().getContent().toStringUtf8());
+            log.info("Handle expired tasks reply: {}", reply.getMessage().getContent().toStringUtf8());
         } catch (IOException e) {
             log.warn("Error while handling expired task: {}", e.getMessage());
             log.debug("Stack trace: ", e);

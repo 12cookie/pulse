@@ -1,6 +1,5 @@
 package org.project.chronos.config;
 
-import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.producer.ProducerConfig;
 import org.apache.kafka.common.serialization.StringSerializer;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -16,7 +15,6 @@ import java.util.Map;
 
 import static org.project.chronos.constants.ChronosConstants.ACK_ALL;
 
-@Slf4j
 @Configuration
 public class KafkaProducerConfig {
 
@@ -33,7 +31,7 @@ public class KafkaProducerConfig {
         configProps.put(ProducerConfig.LINGER_MS_CONFIG, envProperty.getProducerLingerMs());
         configProps.put(ProducerConfig.BATCH_SIZE_CONFIG, envProperty.getProducerBatchSize());
         configProps.put(ProducerConfig.MAX_IN_FLIGHT_REQUESTS_PER_CONNECTION, envProperty.getProducerMaxInFlightRequests());
-        configProps.put(ProducerConfig.RETRIES_CONFIG, envProperty.getProducerRetries());
+        configProps.put(ProducerConfig.DELIVERY_TIMEOUT_MS_CONFIG, envProperty.getProducerDeliveryTimeoutMs());
         configProps.put(ProducerConfig.REQUEST_TIMEOUT_MS_CONFIG, envProperty.getProducerRequestTimeoutMs());
         configProps.put(ProducerConfig.RETRY_BACKOFF_MS_CONFIG, envProperty.getProducerRetryBackoffMs());
         configProps.put(ProducerConfig.ENABLE_IDEMPOTENCE_CONFIG, true);
@@ -41,9 +39,7 @@ public class KafkaProducerConfig {
     }
 
     @Bean
-    public KafkaTemplate<String, Object> kafkaTemplate(
-            @Autowired ProducerFactory<String, Object> producerFactory
-    ) {
+    public KafkaTemplate<String, Object> kafkaTemplate(ProducerFactory<String, Object> producerFactory) {
         return new KafkaTemplate<>(producerFactory);
     }
 }

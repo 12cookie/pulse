@@ -24,24 +24,18 @@ public class ChronosProducer {
     public void publishKafkaEvent(ChronosResultMessage eventMessage, String topic) {
 
         log.debug("Reached Event Producer");
-        kafkaTemplate.executeInTransaction(_ -> {
-            String key = eventMessage.getTaskId();
-            ProducerRecord<String, Object> producerRecord = buildProducerRecord(key, eventMessage, topic);
-            CompletableFuture<SendResult<String, Object>> future = kafkaTemplate.send(producerRecord);
-
-            try {
-                SendResult<String, Object> result = future.get();
-                log.info("Message Sent SuccessFully for the key : {} and the topic is {} , partition is {}",
-                        key, topic, result.getProducerRecord().partition());
-
-            } catch (InterruptedException | RuntimeException | ExecutionException e) {
-                log.error("Error while sending the message to topic {} for the key {} with error {}",
-                        topic, key, e.getMessage());
-                log.debug("Exception details: ", e);
-            }
-
-            return true;
-        });
+        String key = eventMessage.getTaskId();
+        ProducerRecord<String, Object> producerRecord = buildProducerRecord(key, eventMessage, topic);
+        CompletableFuture<SendResult<String, Object>> future = kafkaTemplate.send(producerRecord);
+        try {
+            SendResult<String, Object> result = future.get();
+            log.info("Message Sent SuccessFully for the key : {} and the topic is {} , partition is {}",
+                    key, topic, result.getProducerRecord().partition());
+        } catch (InterruptedException | RuntimeException | ExecutionException e) {
+            log.error("Error while sending the message to topic {} for the key {} with error {}",
+                    topic, key, e.getMessage());
+            log.debug("Exception details: ", e);
+        }
     }
 
     private ProducerRecord<String, Object> buildProducerRecord(String key, Object value, String topic) {

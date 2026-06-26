@@ -4,6 +4,9 @@ import grpc.chronos.executor.ChronosTask;
 import grpc.chronos.executor.GetTaskRequest;
 import grpc.chronos.executor.ResultAcknowledgment;
 import grpc.chronos.executor.ResultSubmissionRequest;
+import io.grpc.Status;
+import io.grpc.StatusRuntimeException;
+import io.micrometer.common.util.StringUtils;
 import lombok.extern.slf4j.Slf4j;
 import org.project.chronos.config.EnvProperty;
 import org.project.chronos.kafka.ChronosProducer;
@@ -40,6 +43,11 @@ public class ChronosTaskManagerImpl implements ChronosTaskManager {
     @Override
     public ChronosTask getChronosTask(GetTaskRequest getTaskRequest) {
         String taskExecutorClientId = getTaskRequest.getTaskExecutorClientId();
+        if (StringUtils.isBlank(taskExecutorClientId)) {
+            log.warn("Task executor client ID is blank in the request.");
+            throw new StatusRuntimeException(Status.INVALID_ARGUMENT.withDescription("Task executor client ID is blank."));
+        }
+
         Optional<ChronosTaskMessage> task = taskFlowHandler.getTask(taskExecutorClientId);
         return task.map(CommonUtil::createScrapingTaskRequest)
                 .orElseGet(() -> ChronosTask.newBuilder()
@@ -61,6 +69,7 @@ public class ChronosTaskManagerImpl implements ChronosTaskManager {
                 .taskResult(chronosTaskResult.getResultData())
                 .taskExecutorId(task.get().getAssignedTaskEntry().getValue().getTaskExecutorClientId())
                 .build());
+        taskFlowHandler.removeTaskFromMap(task.get().getAssignedTaskEntry().getKey());
         return ResultAcknowledgment.newBuilder()
                 .setMessage("Task result received for taskId: " + chronosTaskResult.getTaskId())
                 .build();
@@ -79,5 +88,4 @@ public class ChronosTaskManagerImpl implements ChronosTaskManager {
     private void publishScrapeCompletionMessage(ChronosResultMessage taskResultMessage) {
         chronosProducer.publishKafkaEvent(taskResultMessage, envProperty.getChronosProcessCompletionTopic());
     }
-
 }
