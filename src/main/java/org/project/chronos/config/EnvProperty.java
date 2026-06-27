@@ -74,6 +74,15 @@ public class EnvProperty {
     @Value("${chronos.process.initiation.topic:CHRONOS.PROCESS.INITIATION.TOPIC}")
     private String chronosProcessInitiationTopic;
 
+    @Value("${chronos.process.retry.topic:CHRONOS.PROCESS.RETRY.TOPIC-}")
+    private String chronosProcessRetryTopicPrefix;
+
+    @Value("${chronos.process.retry.total:1}")
+    private int chronosProcessRetries;
+
+    @Value("${chronos.process.retry.interval.ms:10000}")
+    private int chronosProcessRetryIntervalMs;
+
     @Value("${chronos.process.completion.topic:CHRONOS.PROCESS.COMPLETION.TOPIC}")
     private String chronosProcessCompletionTopic;
 
@@ -83,7 +92,7 @@ public class EnvProperty {
     @Value("${raft.peers:n0:localhost:6000,n1:localhost:6001,n2:localhost:6002}")
     private String raftPeers;
 
-    @Value("${task.timeout.ms:1200000}")
+    @Value("${task.timeout.ms:10000}")
     private long taskTimeoutMs;
 
     @Value("${raft.logs.storage.path:./}")
@@ -130,4 +139,5 @@ public class EnvProperty {
 
     @Value("${raft.storage.directory.delete.on-startup:false}")
     private boolean directoryDeletionEnabled;
+
 }

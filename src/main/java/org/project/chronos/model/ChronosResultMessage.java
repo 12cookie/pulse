@@ -5,7 +5,7 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
-import java.util.List;
+import java.util.Map;
 
 @Data
 @Builder
@@ -14,6 +14,8 @@ import java.util.List;
 public class ChronosResultMessage {
 
     private String taskId;
+    private boolean success;
     private String taskExecutorId;
     private String taskResult;
+    private Map<Integer, String> errorMessage;
 }

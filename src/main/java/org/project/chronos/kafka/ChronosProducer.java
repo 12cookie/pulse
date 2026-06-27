@@ -4,28 +4,32 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.producer.ProducerRecord;
 import org.apache.kafka.common.header.Header;
 import org.apache.kafka.common.header.internals.RecordHeader;
-import org.project.chronos.model.ChronosResultMessage;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.kafka.support.SendResult;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 
 @Slf4j
 @Component
-public class ChronosProducer {
+public class ChronosProducer<T> {
 
     @Autowired
     private KafkaTemplate<String, Object> kafkaTemplate;
 
-    public void publishKafkaEvent(ChronosResultMessage eventMessage, String topic) {
-
-        log.debug("Reached Event Producer");
-        String key = eventMessage.getTaskId();
+    public void publishKafkaEvent(String key, T eventMessage, String topic, Map<String, String> headers) {
         ProducerRecord<String, Object> producerRecord = buildProducerRecord(key, eventMessage, topic);
+        if (!Objects.isNull(headers) && !headers.isEmpty()) {
+            for (Map.Entry<String, String> header : headers.entrySet()) {
+                producerRecord.headers().add(new RecordHeader(header.getKey(), header.getValue().getBytes()));
+            }
+        }
+
         CompletableFuture<SendResult<String, Object>> future = kafkaTemplate.send(producerRecord);
         try {
             SendResult<String, Object> result = future.get();
@@ -39,7 +43,6 @@ public class ChronosProducer {
     }
 
     private ProducerRecord<String, Object> buildProducerRecord(String key, Object value, String topic) {
-
         log.debug("Building Producer Record");
         List<Header> recordHeaders = List.of(new RecordHeader("event-source", "scanner".getBytes()));
         return new ProducerRecord<>(topic, null, key, value, recordHeaders);

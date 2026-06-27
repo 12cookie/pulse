@@ -20,7 +20,7 @@ import org.springframework.stereotype.Component;
 import java.io.IOException;
 import java.util.concurrent.atomic.AtomicBoolean;
 
-import static org.project.chronos.constants.ChronosConstants.LISTENER_ID;
+import static org.project.chronos.constants.ChronosConstants.*;
 
 @Slf4j
 @Component
@@ -36,7 +36,9 @@ public class ChronosConsumer {
     @Autowired
     private KafkaListenerEndpointRegistry kafkaListenerEndpointRegistry;
 
-    private final AtomicBoolean isPaused = new AtomicBoolean(false);
+    private final AtomicBoolean isContainerPaused = new AtomicBoolean(false);
+
+    private final AtomicBoolean isRetryContainerPaused = new AtomicBoolean(false);
 
     /**
      * Pause the Kafka consumer immediately after startup so no messages
@@ -45,10 +47,13 @@ public class ChronosConsumer {
     @EventListener(ApplicationReadyEvent.class)
     public void pauseOnStartup() {
         MessageListenerContainer container = kafkaListenerEndpointRegistry.getListenerContainer(LISTENER_ID);
-        if (container != null) {
+        MessageListenerContainer retryContainer = kafkaListenerEndpointRegistry.getListenerContainer(RETRY_LISTENER_ID);
+        if (container != null && retryContainer != null) {
             container.pause();
-            isPaused.set(true);
-            log.info("Kafka consumer paused on startup — waiting for Raft leader election");
+            retryContainer.pause();
+            isContainerPaused.set(true);
+            isRetryContainerPaused.set(true);
+            log.info("Kafka listeners paused on startup — waiting for Raft leader election");
         }
     }
 
@@ -82,47 +87,54 @@ public class ChronosConsumer {
     public void monitorQueueAndControlConsumer() {
         try {
             MessageListenerContainer listenerContainer = kafkaListenerEndpointRegistry.getListenerContainer(LISTENER_ID);
-            if (listenerContainer == null) {
+            MessageListenerContainer retryListenerContainer = kafkaListenerEndpointRegistry.getListenerContainer(RETRY_LISTENER_ID);
+            if (listenerContainer == null || retryListenerContainer == null) {
                 log.warn("Kafka listener container '{}' not found", LISTENER_ID);
                 return;
             }
 
             if (chronosTaskManager.isRaftStable()) {
-                monitorTaskQueue(listenerContainer);
+                monitorTaskQueue(listenerContainer, retryListenerContainer);
                 return;
             }
 
-            pauseKafkaConsumption(listenerContainer);
+            pauseKafkaConsumption(listenerContainer, retryListenerContainer);
         } catch (Exception e) {
             log.error("Error monitoring queue: {}", e.getMessage());
             log.debug("Stack trace: ", e);
         }
     }
 
-    private void pauseKafkaConsumption(MessageListenerContainer listenerContainer) {
-        if (!isPaused.get()) {
-            log.warn("Raft leader not elected — pausing Kafka consumer");
+    private void pauseKafkaConsumption(MessageListenerContainer listenerContainer, MessageListenerContainer retryListenerContainer) {
+        if (!isContainerPaused.get() || !isRetryContainerPaused.get()) {
+            log.warn("Raft leader not elected — pausing Kafka listeners");
             listenerContainer.pause();
-            isPaused.set(true);
+            retryListenerContainer.pause();
+            isContainerPaused.set(true);
+            isRetryContainerPaused.set(true);
         } else {
             log.debug("Waiting for Raft leader election...");
         }
     }
 
-    private void monitorTaskQueue(MessageListenerContainer listenerContainer) throws IOException {
+    private void monitorTaskQueue(MessageListenerContainer listenerContainer, MessageListenerContainer retryListenerContainer) throws IOException {
         int pendingQueueSize = chronosTaskManager.getPendingQueueSize();
-        if (pendingQueueSize >= envProperty.getMaxRaftQueueSize() && !isPaused.get()) {
-            log.warn("Queue size {} exceeded max limit {}, pausing Kafka consumer",
+        if (pendingQueueSize >= envProperty.getMaxRaftQueueSize() && (!isContainerPaused.get() || !isRetryContainerPaused.get())) {
+            log.warn("Queue size {} exceeded max limit {}, pausing Kafka listeners",
                     pendingQueueSize, envProperty.getMaxRaftQueueSize());
             listenerContainer.pause();
-            isPaused.set(true);
-            log.info("Kafka consumer paused successfully");
-        } else if (pendingQueueSize <= envProperty.getMinRaftQueueSize() && isPaused.get()) {
-            log.info("Queue size {} below min limit {}, resuming Kafka consumer",
+            retryListenerContainer.pause();
+            isContainerPaused.set(true);
+            isRetryContainerPaused.set(true);
+            log.info("Kafka listeners paused successfully");
+        } else if (pendingQueueSize <= envProperty.getMinRaftQueueSize() && (isContainerPaused.get() || isRetryContainerPaused.get())) {
+            log.info("Queue size {} below min limit {}, resuming Kafka listeners",
                     pendingQueueSize, envProperty.getMinRaftQueueSize());
             listenerContainer.resume();
-            isPaused.set(false);
-            log.info("Kafka consumer resumed successfully");
+            retryListenerContainer.resume();
+            isContainerPaused.set(false);
+            isRetryContainerPaused.set(false);
+            log.info("Kafka listeners resumed successfully");
         }
     }
 }

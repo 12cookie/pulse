@@ -5,39 +5,50 @@ import org.apache.ratis.protocol.RaftClientReply;
 import org.apache.ratis.protocol.RaftGroup;
 import org.apache.ratis.server.RaftServer;
 import org.project.chronos.config.EnvProperty;
+import org.project.chronos.kafka.ChronosProducer;
+import org.project.chronos.model.AssignedTask;
 import org.project.chronos.model.AssignedTaskWrapper;
 import org.project.chronos.model.ChronosTaskMessage;
+import org.project.chronos.raft.AbstractTaskFlowHandler;
 import org.project.chronos.raft.TaskFlowHandler;
-import org.project.chronos.raft.client.RaftJobClient;
-import org.project.chronos.raft.server.RaftJobServer;
+import org.project.chronos.raft.client.RaftTaskClient;
+import org.project.chronos.raft.server.RaftTaskServer;
 import org.project.chronos.util.CommonUtil;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
+import tools.jackson.core.type.TypeReference;
 
 import java.io.IOException;
+import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 
 import static org.project.chronos.constants.ChronosConstants.*;
+import static org.project.chronos.util.CommonUtil.mapStringToObject;
+import static org.project.chronos.util.CommonUtil.mapStringToTypeReference;
 
 @Slf4j
 @Service
 @ConditionalOnProperty(name = "enable.raft", havingValue = "true")
-public class TaskFlowHandlerRaft implements TaskFlowHandler {
+public class TaskFlowHandlerRaft extends AbstractTaskFlowHandler implements TaskFlowHandler {
 
-    @Autowired
-    private RaftGroup raftGroup;
+    private final RaftGroup raftGroup;
 
-    @Autowired
-    private RaftServer raftServer;
+    private final RaftServer raftServer;
 
-    @Autowired
-    private EnvProperty envProperty;
+    private final EnvProperty envProperty;
 
-    @Autowired
-    private RaftJobClient raftClient;
+    private final RaftTaskClient raftClient;
+
+    public TaskFlowHandlerRaft(RaftGroup raftGroup, RaftServer raftServer, RaftTaskClient raftClient,
+                               EnvProperty envProperty, ChronosProducer<Object> chronosProducer) {
+        super(envProperty, chronosProducer);
+        this.raftGroup = raftGroup;
+        this.raftServer = raftServer;
+        this.raftClient = raftClient;
+        this.envProperty = envProperty;
+    }
 
     @Override
     public void addTaskToQueue(ChronosTaskMessage chronosTaskMessage) throws IOException {
@@ -63,7 +74,7 @@ public class TaskFlowHandlerRaft implements TaskFlowHandler {
             log.info("Reply for command {}: {}", GET_PENDING_TASK, commandResponse);
 
             if (Objects.equals(commandResponse, NO_PENDING_JOB)) return Optional.empty();
-            ChronosTaskMessage chronosTaskMessage = CommonUtil.mapStringToObject(
+            ChronosTaskMessage chronosTaskMessage = mapStringToObject(
                     commandResponse,
                     ChronosTaskMessage.class);
             return Optional.of(chronosTaskMessage);
@@ -86,7 +97,7 @@ public class TaskFlowHandlerRaft implements TaskFlowHandler {
                 return Optional.empty();
             }
 
-            return Optional.of(CommonUtil.mapStringToObject(commandResponse, AssignedTaskWrapper.class));
+            return Optional.of(mapStringToObject(commandResponse, AssignedTaskWrapper.class));
         } catch (IOException ex) {
             // TODO: Handle exception
             log.error("Error while getting job by refId through state machine: {}", ex.getLocalizedMessage());
@@ -116,12 +127,6 @@ public class TaskFlowHandlerRaft implements TaskFlowHandler {
     public int getQueueSize() throws IOException {
         try {
             String queryReply = raftClient.sendQuery(GET_PENDING_TASK_QUEUE_SIZE).getMessage().getContent().toStringUtf8();
-            if (INVALID_QUERY.equals(queryReply)) {
-                log.warn("Received INVALID_QUERY response from Raft state machine");
-                throw new IOException("Received INVALID_QUERY response from Raft state machine");
-            }
-
-            log.info("Pending queue size: {}", Integer.parseInt(queryReply));
             return Integer.parseInt(queryReply);
         } catch (IOException e) {
             // TODO: HANDLE EXCEPTION
@@ -134,7 +139,7 @@ public class TaskFlowHandlerRaft implements TaskFlowHandler {
     public boolean isLeaderElected() {
         if (raftServer == null) return false;
         try {
-            return raftServer.getDivision(RaftJobServer.RAFT_GROUP_ID)
+            return raftServer.getDivision(RaftTaskServer.RAFT_GROUP_ID)
                     .getInfo()
                     .getLeaderId() != null;
         } catch (Exception e) {
@@ -160,7 +165,14 @@ public class TaskFlowHandlerRaft implements TaskFlowHandler {
                     .concat(COLON)
                     .concat(String.valueOf(envProperty.getTaskTimeoutMs()));
             RaftClientReply reply = raftClient.sendCommand(command);
-            log.info("Handle expired tasks reply: {}", reply.getMessage().getContent().toStringUtf8());
+            List<AssignedTask> expiredTasks = mapStringToTypeReference(
+                    reply.getMessage().getContent().toStringUtf8(),
+                    new TypeReference<>() {});
+            for (AssignedTask assignedTask : expiredTasks) {
+                publishFailedTasks(assignedTask, "Task expired");
+            }
+
+            log.info("Total expired task: {}", expiredTasks.size());
         } catch (IOException e) {
             log.warn("Error while handling expired task: {}", e.getMessage());
             log.debug("Stack trace: ", e);

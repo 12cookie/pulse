@@ -15,7 +15,9 @@ message ChronosTask {
 
 message ResultSubmissionRequest {
   string taskId = 1;
-  string resultData = 2;
+  bool success = 2;
+  string resultData = 3;
+  string errorMessage = 4;
 }
 
 message ResultAcknowledgment {

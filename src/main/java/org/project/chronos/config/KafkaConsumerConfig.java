@@ -55,7 +55,6 @@ public class KafkaConsumerConfig {
         props.put(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, Boolean.FALSE);
         JsonMapper chronosObjectMapper = JsonMapper.builder()
                 .configure(DeserializationFeature.FAIL_ON_NULL_FOR_PRIMITIVES, true)
-                .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, true)
                 .configure(DeserializationFeature.FAIL_ON_MISSING_CREATOR_PROPERTIES, true)
                 .build();
         JacksonJsonDeserializer<ChronosTaskMessage> jsonDeserializer = new JacksonJsonDeserializer<>(

@@ -1,6 +1,8 @@
 package org.project.chronos.raft;
 
+import org.project.chronos.model.AssignedTask;
 import org.project.chronos.model.AssignedTaskWrapper;
+import org.project.chronos.model.ChronosResultMessage;
 import org.project.chronos.model.ChronosTaskMessage;
 
 import java.io.IOException;
@@ -19,4 +21,9 @@ public interface TaskFlowHandler {
     int getQueueSize() throws IOException;
 
     boolean isLeaderElected();
+
+    void publishFailedTasks(AssignedTask assignedTask, String errorMessage);
+
+    void publishCompletedTask(ChronosResultMessage resultMessage);
+
 }

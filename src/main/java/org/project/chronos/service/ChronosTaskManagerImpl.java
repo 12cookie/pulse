@@ -8,8 +8,7 @@ import io.grpc.Status;
 import io.grpc.StatusRuntimeException;
 import io.micrometer.common.util.StringUtils;
 import lombok.extern.slf4j.Slf4j;
-import org.project.chronos.config.EnvProperty;
-import org.project.chronos.kafka.ChronosProducer;
+import org.project.chronos.model.AssignedTask;
 import org.project.chronos.model.AssignedTaskWrapper;
 import org.project.chronos.model.ChronosResultMessage;
 import org.project.chronos.model.ChronosTaskMessage;
@@ -21,15 +20,11 @@ import org.springframework.stereotype.Service;
 import java.io.IOException;
 import java.util.Optional;
 
+import static org.project.chronos.constants.ChronosConstants.TASK_RESULT_ACK_FORMATTER;
+
 @Slf4j
 @Service
 public class ChronosTaskManagerImpl implements ChronosTaskManager {
-
-    @Autowired
-    private EnvProperty envProperty;
-
-    @Autowired
-    private ChronosProducer chronosProducer;
 
     @Autowired
     private TaskFlowHandler taskFlowHandler;
@@ -64,14 +59,22 @@ public class ChronosTaskManagerImpl implements ChronosTaskManager {
                     .build();
         }
 
-        publishScrapeCompletionMessage(ChronosResultMessage.builder()
-                .taskId(chronosTaskResult.getTaskId())
-                .taskResult(chronosTaskResult.getResultData())
-                .taskExecutorId(task.get().getAssignedTaskEntry().getValue().getTaskExecutorClientId())
-                .build());
+        AssignedTask assignedTask = task.get().getAssignedTaskEntry().getValue();
+        if (!chronosTaskResult.getSuccess()) {
+            taskFlowHandler.publishFailedTasks(assignedTask, chronosTaskResult.getErrorMessage());
+        } else {
+            taskFlowHandler.publishCompletedTask(ChronosResultMessage.builder()
+                    .taskId(chronosTaskResult.getTaskId())
+                    .success(true)
+                    .taskResult(chronosTaskResult.getResultData())
+                    .taskExecutorId(task.get().getAssignedTaskEntry().getValue().getTaskExecutorClientId())
+                    .errorMessage(assignedTask.getTask().getErrorMessage())
+                    .build());
+        }
+
         taskFlowHandler.removeTaskFromMap(task.get().getAssignedTaskEntry().getKey());
         return ResultAcknowledgment.newBuilder()
-                .setMessage("Task result received for taskId: " + chronosTaskResult.getTaskId())
+                .setMessage(String.format(TASK_RESULT_ACK_FORMATTER, assignedTask.getTask().getTaskId()))
                 .build();
     }
 
@@ -83,9 +86,5 @@ public class ChronosTaskManagerImpl implements ChronosTaskManager {
     @Override
     public boolean isRaftStable() {
         return taskFlowHandler.isLeaderElected();
-    }
-
-    private void publishScrapeCompletionMessage(ChronosResultMessage taskResultMessage) {
-        chronosProducer.publishKafkaEvent(taskResultMessage, envProperty.getChronosProcessCompletionTopic());
     }
 }

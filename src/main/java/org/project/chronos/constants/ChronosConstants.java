@@ -4,6 +4,8 @@ public interface ChronosConstants {
 
     String COLON = ":";
 
+    String DELIMITER = "::";
+
     String HYPHEN = "-";
 
     String COMMA = ",";
@@ -18,7 +20,11 @@ public interface ChronosConstants {
 
     String DEFAULT_POD = "pod-0";
 
+    String retryAfterHeaderKey = "retryAfter";
+
     String LISTENER_ID = "chronosConsumerListener";
+
+    String RETRY_LISTENER_ID = "chronosRetryConsumerListener";
 
     String RAFT_GROUP = "chronos-raft-group";
 
@@ -38,8 +44,6 @@ public interface ChronosConstants {
 
     String TASK_REMOVED_SUCCESSFULLY = "TASK_REMOVED_SUCCESSFULLY";
 
-    String REASSIGNED_EXPIRED_JOBS = "REASSIGNED_EXPIRED_JOBS";
-
     String NO_TASK_FOUND_IN_MAP = "NO_JOB_FOUND_IN_MAP";
 
     String NO_PENDING_JOB = "NO_PENDING_JOB";
@@ -51,5 +55,7 @@ public interface ChronosConstants {
     String INVALID_QUERY = "INVALID_QUERY";
 
     String GET_PENDING_TASK_QUEUE_SIZE = "GET_PENDING_JOB_QUEUE_SIZE";
+
+    String TASK_RESULT_ACK_FORMATTER = "Task result received for taskId: %s";
 
 }
