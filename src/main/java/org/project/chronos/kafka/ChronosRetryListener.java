@@ -44,9 +44,9 @@ public class ChronosRetryListener implements ConsumerSeekAware {
                                 KafkaListenerEndpointRegistry kafkaListenerEndpointRegistry) {
         this.chronosTaskManager = chronosTaskManager;
         this.kafkaListenerEndpointRegistry = kafkaListenerEndpointRegistry;
-        this.scheduledExecutorService = Executors.newScheduledThreadPool(
-                envProperty.getNumberOfPartition(),
-                Thread.ofVirtual().factory());
+        ScheduledThreadPoolExecutor executor = new ScheduledThreadPoolExecutor(envProperty.getChronosSchedulerThreadPoolSize());
+        executor.setRemoveOnCancelPolicy(true);
+        this.scheduledExecutorService = executor;
     }
 
     @Override

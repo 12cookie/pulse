@@ -86,6 +86,9 @@ public class EnvProperty {
     @Value("${chronos.process.completion.topic:CHRONOS.PROCESS.COMPLETION.TOPIC}")
     private String chronosProcessCompletionTopic;
 
+    @Value("${chronos.scheduler.thread.pool.size:2}")
+    private int chronosSchedulerThreadPoolSize;
+
     /**
      * Raft properties
      */

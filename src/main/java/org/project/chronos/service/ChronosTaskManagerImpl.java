@@ -45,9 +45,7 @@ public class ChronosTaskManagerImpl implements ChronosTaskManager {
 
         Optional<ChronosTaskMessage> task = taskFlowHandler.getTask(taskExecutorClientId);
         return task.map(CommonUtil::createScrapingTaskRequest)
-                .orElseGet(() -> ChronosTask.newBuilder()
-                        .setTaskAvailable(false)
-                        .build());
+                .orElseGet(() -> ChronosTask.newBuilder().setTaskAvailable(false).build());
     }
 
     @Override
