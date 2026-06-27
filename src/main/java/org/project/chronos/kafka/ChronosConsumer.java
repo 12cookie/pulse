@@ -40,10 +40,6 @@ public class ChronosConsumer {
 
     private final AtomicBoolean isRetryContainerPaused = new AtomicBoolean(false);
 
-    /**
-     * Pause the Kafka consumer immediately after startup so no messages
-     * are processed until a Raft leader is elected.
-     */
     @EventListener(ApplicationReadyEvent.class)
     public void pauseOnStartup() {
         MessageListenerContainer container = kafkaListenerEndpointRegistry.getListenerContainer(LISTENER_ID);
@@ -75,31 +71,22 @@ public class ChronosConsumer {
         }
     }
 
-    /**
-     * Periodically checks Raft leader status and queue size to pause/resume
-     * the Kafka consumer accordingly.
-     * - If no leader is elected yet: keep paused.
-     * - If leader is elected: apply queue-size thresholds as normal.
-     */
     @Scheduled(
             initialDelayString = "${kafka.consumer.monitor.initial.delay.ms:10000}",
             fixedDelayString = "${kafka.consumer.monitor.interval.ms:5000}")
     public void monitorQueueAndControlConsumer() {
+        MessageListenerContainer listenerContainer = kafkaListenerEndpointRegistry.getListenerContainer(LISTENER_ID);
+        MessageListenerContainer retryListenerContainer = kafkaListenerEndpointRegistry.getListenerContainer(RETRY_LISTENER_ID);
         try {
-            MessageListenerContainer listenerContainer = kafkaListenerEndpointRegistry.getListenerContainer(LISTENER_ID);
-            MessageListenerContainer retryListenerContainer = kafkaListenerEndpointRegistry.getListenerContainer(RETRY_LISTENER_ID);
             if (listenerContainer == null || retryListenerContainer == null) {
                 log.warn("Kafka listener container '{}' not found", LISTENER_ID);
                 return;
             }
 
-            if (chronosTaskManager.isRaftStable()) {
-                monitorTaskQueue(listenerContainer, retryListenerContainer);
-                return;
-            }
+            monitorTaskQueue(listenerContainer, retryListenerContainer);
 
-            pauseKafkaConsumption(listenerContainer, retryListenerContainer);
         } catch (Exception e) {
+            pauseKafkaConsumption(listenerContainer, retryListenerContainer);
             log.error("Error monitoring queue: {}", e.getMessage());
             log.debug("Stack trace: ", e);
         }
@@ -138,4 +125,3 @@ public class ChronosConsumer {
         }
     }
 }
-

@@ -12,7 +12,6 @@ import org.project.chronos.model.ChronosTaskMessage;
 import org.project.chronos.raft.AbstractTaskFlowHandler;
 import org.project.chronos.raft.TaskFlowHandler;
 import org.project.chronos.raft.client.RaftTaskClient;
-import org.project.chronos.raft.server.RaftTaskServer;
 import org.project.chronos.util.CommonUtil;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -52,11 +51,6 @@ public class TaskFlowHandlerRaft extends AbstractTaskFlowHandler implements Task
 
     @Override
     public void addTaskToQueue(ChronosTaskMessage chronosTaskMessage) throws IOException {
-        if (leaderNotElected()) {
-            throw new IOException("Raft leader not elected yet; cannot enqueue job for refId: "
-                    + chronosTaskMessage.getTaskId());
-        }
-
         String jobListString = CommonUtil.mapObjectToString(chronosTaskMessage);
         RaftClientReply reply = raftClient.sendCommand(ADD_TASK_TO_QUEUE.concat(COLON).concat(jobListString));
         log.info("Reply for command {}: {}", ADD_TASK_TO_QUEUE, reply.getMessage().getContent().toStringUtf8());
@@ -64,10 +58,6 @@ public class TaskFlowHandlerRaft extends AbstractTaskFlowHandler implements Task
 
     @Override
     public Optional<ChronosTaskMessage> getTask(String taskExecutorClientId) {
-        if (leaderNotElected()) {
-            return Optional.empty();
-        }
-
         try {
             RaftClientReply reply = raftClient.sendCommand(GET_PENDING_TASK.concat(COLON).concat(taskExecutorClientId));
             String commandResponse = reply.getMessage().getContent().toStringUtf8();
@@ -80,7 +70,6 @@ public class TaskFlowHandlerRaft extends AbstractTaskFlowHandler implements Task
             return Optional.of(chronosTaskMessage);
 
         } catch (IOException ex) {
-            // TODO: Handle exception properly
             log.error("Error while getting job through state machine: {}", ex.getLocalizedMessage());
             return Optional.empty();
         }
@@ -99,7 +88,6 @@ public class TaskFlowHandlerRaft extends AbstractTaskFlowHandler implements Task
 
             return Optional.of(mapStringToObject(commandResponse, AssignedTaskWrapper.class));
         } catch (IOException ex) {
-            // TODO: Handle exception
             log.error("Error while getting job by refId through state machine: {}", ex.getLocalizedMessage());
             return Optional.empty();
         }
@@ -117,35 +105,14 @@ public class TaskFlowHandlerRaft extends AbstractTaskFlowHandler implements Task
         }
     }
 
-    /**
-     * Get the current size of the pending job queue from the Raft state machine.
-     *
-     * @return the number of jobs in the pending queue
-     * @throws IOException if the query fails
-     */
     @Override
     public int getQueueSize() throws IOException {
         try {
             String queryReply = raftClient.sendQuery(GET_PENDING_TASK_QUEUE_SIZE).getMessage().getContent().toStringUtf8();
             return Integer.parseInt(queryReply);
         } catch (IOException e) {
-            // TODO: HANDLE EXCEPTION
             log.error("Failed to get pending queue size: {}", e.getMessage());
             throw e;
-        }
-    }
-
-    @Override
-    public boolean isLeaderElected() {
-        if (raftServer == null) return false;
-        try {
-            return raftServer.getDivision(RaftTaskServer.RAFT_GROUP_ID)
-                    .getInfo()
-                    .getLeaderId() != null;
-        } catch (Exception e) {
-            log.warn("Could not determine leader election status: {}", e.getMessage());
-            log.debug("Stack trace: ", e);
-            return false;
         }
     }
 
@@ -153,7 +120,6 @@ public class TaskFlowHandlerRaft extends AbstractTaskFlowHandler implements Task
             initialDelayString = "${expired.task.scheduler.initial.delay.ms:10000}",
             fixedRateString = "${expired.task.check.interval.ms:2000}")
     private void handleExpiredTasks() {
-
         if (!isCurrentNodeLeader()) {
             log.debug("Skipping expired task handler execution on follower");
             return;
@@ -177,10 +143,6 @@ public class TaskFlowHandlerRaft extends AbstractTaskFlowHandler implements Task
             log.warn("Error while handling expired task: {}", e.getMessage());
             log.debug("Stack trace: ", e);
         }
-    }
-
-    private boolean leaderNotElected() {
-        return !isLeaderElected();
     }
 
     private boolean isCurrentNodeLeader() {

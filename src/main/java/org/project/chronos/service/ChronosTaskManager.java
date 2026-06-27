@@ -18,6 +18,4 @@ public interface ChronosTaskManager {
 
     int getPendingQueueSize() throws IOException;
 
-    boolean isRaftStable();
-
 }

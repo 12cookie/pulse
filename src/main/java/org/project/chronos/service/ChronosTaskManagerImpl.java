@@ -82,9 +82,4 @@ public class ChronosTaskManagerImpl implements ChronosTaskManager {
     public int getPendingQueueSize() throws IOException {
         return taskFlowHandler.getQueueSize();
     }
-
-    @Override
-    public boolean isRaftStable() {
-        return taskFlowHandler.isLeaderElected();
-    }
 }

@@ -20,10 +20,7 @@ public interface TaskFlowHandler {
 
     int getQueueSize() throws IOException;
 
-    boolean isLeaderElected();
-
     void publishFailedTasks(AssignedTask assignedTask, String errorMessage);
 
     void publishCompletedTask(ChronosResultMessage resultMessage);
-
 }
