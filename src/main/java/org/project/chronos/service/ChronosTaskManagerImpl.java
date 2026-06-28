@@ -36,6 +36,12 @@ public class ChronosTaskManagerImpl implements ChronosTaskManager {
     }
 
     @Override
+    public void addPriorityTaskToQueue(ChronosTaskMessage requestMessage) throws IOException {
+        log.info("Received scraping request!!");
+        taskFlowHandler.addPriorityTaskToQueue(requestMessage);
+    }
+
+    @Override
     public ChronosTask getChronosTask(GetTaskRequest getTaskRequest) {
         String taskExecutorClientId = getTaskRequest.getTaskExecutorClientId();
         if (StringUtils.isBlank(taskExecutorClientId)) {
@@ -80,4 +86,10 @@ public class ChronosTaskManagerImpl implements ChronosTaskManager {
     public int getPendingQueueSize() throws IOException {
         return taskFlowHandler.getQueueSize();
     }
+
+    @Override
+    public int getPriorityQueueSize() throws IOException {
+        return taskFlowHandler.getPriorityQueueSize();
+    }
+
 }

@@ -44,6 +44,8 @@ public class TaskStateMachine extends BaseStateMachine {
 
     private final BlockingQueue<ChronosTaskMessage> pendingTaskQueue = new LinkedBlockingQueue<>();
 
+    private final BlockingQueue<ChronosTaskMessage> priorityTaskQueue = new LinkedBlockingQueue<>();
+
     private final ConcurrentHashMap<Long, AssignedTask> assignedTaskMap = new ConcurrentHashMap<>();
 
     private final ReentrantReadWriteLock lock = new ReentrantReadWriteLock(true);
@@ -91,6 +93,7 @@ public class TaskStateMachine extends BaseStateMachine {
      */
     void reset() {
         pendingTaskQueue.clear();
+        priorityTaskQueue.clear();
         assignedTaskMap.clear();
         setLastAppliedTermIndex(null);
     }
@@ -160,12 +163,14 @@ public class TaskStateMachine extends BaseStateMachine {
     @Override
     public long takeSnapshot() throws IOException {
         final BlockingQueue<ChronosTaskMessage> pendingTaskCopy;
+        final BlockingQueue<ChronosTaskMessage> priorityTaskCopy;
         final ConcurrentHashMap<Long, AssignedTask> assignedTaskCopy;
 
         long startTime = System.currentTimeMillis();
         final TermIndex last;
         try (AutoCloseableLock ignored = readLock()) {
             pendingTaskCopy = new LinkedBlockingQueue<>(pendingTaskQueue);
+            priorityTaskCopy = new LinkedBlockingQueue<>(priorityTaskQueue);
             assignedTaskCopy = new ConcurrentHashMap<>(assignedTaskMap);
             last = getLastAppliedTermIndex();
         }
@@ -176,6 +181,7 @@ public class TaskStateMachine extends BaseStateMachine {
             out.writeInt(CURRENT_VERSION);
             log.info("Snapshot version during write: {}", CURRENT_VERSION);
             out.writeObject(pendingTaskCopy);
+            out.writeObject(priorityTaskCopy);
             out.writeObject(assignedTaskCopy);
         } catch (IOException ioe) {
             raftCustomMetrics.count(RAFT_TAKE_SNAPSHOT_FAILURE, RAFT_TAKE_SNAPSHOT_FAILURE_DESC);
@@ -230,6 +236,7 @@ public class TaskStateMachine extends BaseStateMachine {
             int version = in.readInt();
             log.info("Snapshot version during read: {}", version);
             pendingTaskQueue.addAll(JavaUtils.cast(in.readObject()));
+            priorityTaskQueue.addAll(JavaUtils.cast(in.readObject()));
             assignedTaskMap.putAll(JavaUtils.cast(in.readObject()));
             log.info("Snapshot loaded successfully from file {}, last applied index = {}", snapshotFile, last);
         } catch (ClassNotFoundException | IOException e) {
@@ -273,6 +280,12 @@ public class TaskStateMachine extends BaseStateMachine {
                     return CompletableFuture.completedFuture(Message.valueOf(Integer.toString(qSize)));
                 }
 
+                case GET_PRIORITY_TASK_QUEUE_SIZE: {
+                    int qSize = priorityTaskQueue.size();
+                    raftCustomMetrics.count(RAFT_QUERY_SUCCESS, RAFT_QUERY_SUCCESS_DESC, String.format(QUERY_FORMATTER, receivedQuery));
+                    return CompletableFuture.completedFuture(Message.valueOf(Integer.toString(qSize)));
+                }
+
                 case GET_ASSIGNED_TASK_FROM_MAP: {
                     return getAssignedTaskFromMap(parts[1], parts[0]);
                 }
@@ -309,6 +322,7 @@ public class TaskStateMachine extends BaseStateMachine {
             String transactionName = parts[0];
             switch (transactionName) {
                 case ADD_TASK_TO_QUEUE -> transactionResult = addTaskToQueue(parts[1], transactionName);
+                case ADD_PRIORITY_TASK_TO_QUEUE -> transactionResult = addPriorityTaskToQueue(parts[1], transactionName);
                 case GET_PENDING_TASK -> transactionResult = getPendingTask(parts[1], transactionName);
                 case REMOVE_TASK_FROM_MAP -> transactionResult = removeTaskFromMap(Long.valueOf(parts[1]), transactionName);
                 case HANDLE_EXPIRED_TASKS -> transactionResult = enqueueExpiredTask(Long.parseLong(parts[1]), transactionName);
@@ -329,6 +343,14 @@ public class TaskStateMachine extends BaseStateMachine {
         }
     }
 
+    private @NonNull CompletableFuture<Message> addPriorityTaskToQueue(String task, String transactionName) {
+        ChronosTaskMessage chronosTaskMessage = new ObjectMapper().readValue(task, ChronosTaskMessage.class);
+        priorityTaskQueue.add(chronosTaskMessage);
+        log.debug("Size of pending queue on command {}: {}", transactionName, priorityTaskQueue.size());
+        raftCustomMetrics.count(RAFT_TRANSACTION_SUCCESS, RAFT_TRANSACTION_SUCCESS_DESC, String.format(COMMAND_FORMATTER, transactionName));
+        return CompletableFuture.completedFuture(Message.valueOf(JOB_ADDED_SUCCESSFULLY));
+    }
+
     private @NonNull CompletableFuture<Message> addTaskToQueue(String task, String transactionName) {
         ChronosTaskMessage chronosTaskMessage = new ObjectMapper().readValue(task, ChronosTaskMessage.class);
         pendingTaskQueue.add(chronosTaskMessage);
@@ -338,7 +360,11 @@ public class TaskStateMachine extends BaseStateMachine {
     }
 
     private @NonNull CompletableFuture<Message> getPendingTask(String taskExecutorId, String transactionName) {
-        ChronosTaskMessage task = pendingTaskQueue.poll();
+        ChronosTaskMessage task = priorityTaskQueue.poll();
+        if (Objects.isNull(task)) {
+            task = pendingTaskQueue.poll();
+        }
+
         if (Objects.isNull(task)) {
             log.debug("No pending task available on command {}", GET_PENDING_TASK);
             raftCustomMetrics.count(RAFT_TRANSACTION_SUCCESS, RAFT_TRANSACTION_SUCCESS_DESC, String.format(COMMAND_FORMATTER, transactionName));

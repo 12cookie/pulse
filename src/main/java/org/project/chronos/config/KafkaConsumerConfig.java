@@ -89,6 +89,7 @@ public class KafkaConsumerConfig {
                     log.error("DeadLetter Recoverer Error for key: {}, message: {}", record.key(), exception.getMessage());
                     return new TopicPartition(envProperty.getChronosProcessCompletionTopic(), -1);
                 });
+
         return new DefaultErrorHandler(recoverer, noRetryBackOff);
     }
 }

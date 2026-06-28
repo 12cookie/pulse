@@ -24,7 +24,7 @@ public class KafkaTopicConfig implements ChronosConstants {
 
     @Bean
     public KafkaAdmin admin() {
-        Map <String, Object> configs = new HashMap <> ();
+        Map<String, Object> configs = new HashMap<>();
         configs.put(AdminClientConfig.BOOTSTRAP_SERVERS_CONFIG, envProperty.getProducerBootstrapServers());
         return new KafkaAdmin(configs);
     }
@@ -37,6 +37,11 @@ public class KafkaTopicConfig implements ChronosConstants {
     private NewTopic[] getNewTopics() {
         List<NewTopic> newTopicList = new ArrayList<>();
         newTopicList.add(TopicBuilder.name(envProperty.getChronosProcessInitiationTopic())
+                .partitions(envProperty.getNumberOfPartition())
+                .replicas(envProperty.getNumberOfReplica())
+                .config(TopicConfig.RETENTION_MS_CONFIG, String.valueOf(envProperty.getRetentionPeriodMs()))
+                .build());
+        newTopicList.add(TopicBuilder.name(envProperty.getChronosProcessPriorityTopic())
                 .partitions(envProperty.getNumberOfPartition())
                 .replicas(envProperty.getNumberOfReplica())
                 .config(TopicConfig.RETENTION_MS_CONFIG, String.valueOf(envProperty.getRetentionPeriodMs()))
@@ -54,6 +59,7 @@ public class KafkaTopicConfig implements ChronosConstants {
                     .build());
         }
 
-        return newTopicList.toArray(new NewTopic[envProperty.getChronosProcessRetries() + 2]);
+        return newTopicList.toArray(new NewTopic[envProperty.getChronosProcessRetries() + 3]);
     }
+
 }

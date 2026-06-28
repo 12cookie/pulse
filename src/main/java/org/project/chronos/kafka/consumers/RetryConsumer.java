@@ -1,4 +1,4 @@
-package org.project.chronos.kafka;
+package org.project.chronos.kafka.consumers;
 
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
@@ -27,7 +27,7 @@ import static org.project.chronos.constants.ChronosConstants.retryAfterHeaderKey
 
 @Slf4j
 @Component
-public class ChronosRetryListener implements ConsumerSeekAware {
+public class RetryConsumer implements ConsumerSeekAware {
 
     private final ChronosTaskManager chronosTaskManager;
 
@@ -39,9 +39,9 @@ public class ChronosRetryListener implements ConsumerSeekAware {
 
     private final ThreadLocal<ConsumerSeekAware.ConsumerSeekCallback> seekCallback = new ThreadLocal<>();
 
-    public ChronosRetryListener(EnvProperty envProperty,
-                                ChronosTaskManager chronosTaskManager,
-                                KafkaListenerEndpointRegistry kafkaListenerEndpointRegistry) {
+    public RetryConsumer(EnvProperty envProperty,
+                         ChronosTaskManager chronosTaskManager,
+                         KafkaListenerEndpointRegistry kafkaListenerEndpointRegistry) {
         this.chronosTaskManager = chronosTaskManager;
         this.kafkaListenerEndpointRegistry = kafkaListenerEndpointRegistry;
         ScheduledThreadPoolExecutor executor = new ScheduledThreadPoolExecutor(envProperty.getChronosSchedulerThreadPoolSize());

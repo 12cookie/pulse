@@ -12,10 +12,13 @@ public interface ChronosTaskManager {
 
     void addTaskToQueue(ChronosTaskMessage requestMessage) throws IOException;
 
+    void addPriorityTaskToQueue(ChronosTaskMessage requestMessage) throws IOException;
+
     ChronosTask getChronosTask(GetTaskRequest taskRequest);
 
     ResultAcknowledgment submitTaskResult(ResultSubmissionRequest chronosTaskResult);
 
     int getPendingQueueSize() throws IOException;
 
+    int getPriorityQueueSize() throws IOException;
 }

@@ -12,6 +12,8 @@ public interface TaskFlowHandler {
 
     void addTaskToQueue(ChronosTaskMessage chronosTaskMessage) throws IOException;
 
+    void addPriorityTaskToQueue(ChronosTaskMessage chronosTaskMessage) throws IOException;
+
     Optional<ChronosTaskMessage> getTask(String taskExecutorClientId);
 
     Optional<AssignedTaskWrapper> getAssignedTask(String taskId);
@@ -19,6 +21,8 @@ public interface TaskFlowHandler {
     void removeTaskFromMap(long key);
 
     int getQueueSize() throws IOException;
+
+    int getPriorityQueueSize() throws IOException;
 
     void publishFailedTasks(AssignedTask assignedTask, String errorMessage);
 

@@ -57,6 +57,13 @@ public class TaskFlowHandlerRaft extends AbstractTaskFlowHandler implements Task
     }
 
     @Override
+    public void addPriorityTaskToQueue(ChronosTaskMessage chronosTaskMessage) throws IOException {
+        String jobListString = CommonUtil.mapObjectToString(chronosTaskMessage);
+        RaftClientReply reply = raftClient.sendCommand(ADD_PRIORITY_TASK_TO_QUEUE.concat(COLON).concat(jobListString));
+        log.info("Reply for command {}: {}", ADD_PRIORITY_TASK_TO_QUEUE, reply.getMessage().getContent().toStringUtf8());
+    }
+
+    @Override
     public Optional<ChronosTaskMessage> getTask(String taskExecutorClientId) {
         try {
             RaftClientReply reply = raftClient.sendCommand(GET_PENDING_TASK.concat(COLON).concat(taskExecutorClientId));
@@ -109,6 +116,17 @@ public class TaskFlowHandlerRaft extends AbstractTaskFlowHandler implements Task
     public int getQueueSize() throws IOException {
         try {
             String queryReply = raftClient.sendQuery(GET_PENDING_TASK_QUEUE_SIZE).getMessage().getContent().toStringUtf8();
+            return Integer.parseInt(queryReply);
+        } catch (IOException e) {
+            log.error("Failed to get pending queue size: {}", e.getMessage());
+            throw e;
+        }
+    }
+
+    @Override
+    public int getPriorityQueueSize() throws IOException {
+        try {
+            String queryReply = raftClient.sendQuery(GET_PRIORITY_TASK_QUEUE_SIZE).getMessage().getContent().toStringUtf8();
             return Integer.parseInt(queryReply);
         } catch (IOException e) {
             log.error("Failed to get pending queue size: {}", e.getMessage());

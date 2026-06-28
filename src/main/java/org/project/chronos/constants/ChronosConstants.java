@@ -1,7 +1,6 @@
 package org.project.chronos.constants;
 
 public interface ChronosConstants {
-
     String COLON = ":";
 
     String DELIMITER = "::";
@@ -26,9 +25,13 @@ public interface ChronosConstants {
 
     String RETRY_LISTENER_ID = "chronosRetryConsumerListener";
 
+    String PRIORITY_LISTENER_ID = "chronosPriorityListener";
+
     String RAFT_GROUP = "chronos-raft-group";
 
     String ADD_TASK_TO_QUEUE = "ADD_TASK_TO_QUEUE";
+
+    String ADD_PRIORITY_TASK_TO_QUEUE = "ADD_PRIORITY_TASK_TO_QUEUE";
 
     String INVALID_ACTION = "INVALID_ACTION";
 
@@ -56,6 +59,7 @@ public interface ChronosConstants {
 
     String GET_PENDING_TASK_QUEUE_SIZE = "GET_PENDING_JOB_QUEUE_SIZE";
 
-    String TASK_RESULT_ACK_FORMATTER = "Task result received for taskId: %s";
+    String GET_PRIORITY_TASK_QUEUE_SIZE = "GET_PRIORITY_TASK_QUEUE_SIZE";
 
+    String TASK_RESULT_ACK_FORMATTER = "Task result received for taskId: %s";
 }
