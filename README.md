@@ -56,7 +56,7 @@ The most important properties are:
 - `spring.kafka.listener.concurrency` - listener concurrency
 - `spring.kafka.consumer.group-id` - consumer group id
 - `chronos.process.initiation.topic` - normal task topic, default `CHRONOS.PROCESS.INITIATION.TOPIC`
-- `chronos.process.priority.topic` - priority task topic, default `CHRONOS.PROCESS.PIORITY.TOPIC`
+- `chronos.process.priority.topic` - priority task topic, default `CHRONOS.PROCESS.PRIORITY.TOPIC`
 - `chronos.process.retry.topic` - retry topic prefix, default `CHRONOS.PROCESS.RETRY.TOPIC-`
 - `chronos.process.completion.topic` - completion topic, default `CHRONOS.PROCESS.COMPLETION.TOPIC`
 
@@ -95,7 +95,7 @@ The last numeric suffix is mapped to Raft peer ids like `n0`, `n1`, `n2`.
 Unless overridden, the service uses these Kafka topics:
 
 - `CHRONOS.PROCESS.INITIATION.TOPIC`
-- `CHRONOS.PROCESS.PIORITY.TOPIC`
+- `CHRONOS.PROCESS.PRIORITY.TOPIC`
 - `CHRONOS.PROCESS.RETRY.TOPIC-.*`
 - `CHRONOS.PROCESS.COMPLETION.TOPIC`
 

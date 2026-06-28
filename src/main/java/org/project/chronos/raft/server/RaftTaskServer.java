@@ -31,6 +31,9 @@ import java.util.stream.Collectors;
 
 import static org.project.chronos.constants.ChronosConstants.*;
 
+/**
+ * Configures and starts the embedded Raft server for Chronos task coordination.
+ */
 @Slf4j
 @Configuration
 @ConditionalOnProperty(name = "enable.raft", havingValue = "true")
@@ -42,6 +45,13 @@ public class RaftTaskServer {
 
     private final RaftGroup raftGroup;
 
+    /**
+     * Build and start the Raft server using the configured peers and storage settings.
+     *
+     * @param envProperty application and Raft configuration
+     * @param raftCustomMetrics metrics registry for Raft instrumentation
+     * @throws IOException if the server cannot be initialized or started
+     */
     public RaftTaskServer(EnvProperty envProperty, RaftCustomMetrics raftCustomMetrics) throws IOException {
         List<RaftPeer> peers = getRaftPeers(envProperty);
         this.raftGroup = RaftGroup.valueOf(RAFT_GROUP_ID, peers);
@@ -91,6 +101,11 @@ public class RaftTaskServer {
         log.info("Raft server {} started at {}", serverId, currentPeerId);
     }
 
+    /**
+     * Stop the Raft server during application shutdown.
+     *
+     * @throws IOException if closing the server fails
+     */
     @PreDestroy
     public void stop() throws IOException {
         if (raftServer != null) {
@@ -98,11 +113,21 @@ public class RaftTaskServer {
         }
     }
 
+    /**
+     * Expose the constructed Raft server as a Spring bean.
+     *
+     * @return the configured Raft server instance
+     */
     @Bean
     public RaftServer raftServer() {
         return this.raftServer;
     }
 
+    /**
+     * Expose the Raft group as a Spring bean.
+     *
+     * @return the configured Raft group
+     */
     @Bean
     public RaftGroup raftGroup() {
         return this.raftGroup;

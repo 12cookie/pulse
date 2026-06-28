@@ -45,7 +45,6 @@ public class ConsumerManager {
         pauseKafkaContainers(container, retryContainer, priorityContainer);
     }
 
-
     @Scheduled(
             initialDelayString = "${kafka.consumer.monitor.initial.delay.ms:10000}",
             fixedDelayString = "${kafka.consumer.monitor.interval.ms:5000}")
@@ -60,7 +59,6 @@ public class ConsumerManager {
             }
 
             monitorTaskQueue(listenerContainer, retryListenerContainer, priorityContainer);
-
         } catch (Exception e) {
             pauseKafkaContainers(listenerContainer, retryListenerContainer, priorityContainer);
             log.error("Error monitoring queue: {}", e.getMessage());

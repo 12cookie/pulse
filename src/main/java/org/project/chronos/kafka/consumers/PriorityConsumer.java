@@ -23,7 +23,7 @@ public class PriorityConsumer {
 
     @KafkaListener(
             id = PRIORITY_LISTENER_ID,
-            topics = {"${chronos.process.priority.topic:CHRONOS.PROCESS.PIORITY.TOPIC}"})
+            topics = {"${chronos.process.priority.topic:CHRONOS.PROCESS.PRIORITY.TOPIC}"})
     public void onMessage(ConsumerRecord<String, ChronosTaskMessage> consumerRecord, Acknowledgment acknowledgment) {
         log.info("Received message - key: {}, topic: {}", consumerRecord.key(), consumerRecord.topic());
         try {

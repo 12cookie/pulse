@@ -26,6 +26,9 @@ import java.util.stream.Collectors;
 
 import static org.project.chronos.raft.server.RaftTaskServer.RAFT_GROUP_ID;
 
+/**
+ * Raft client wrapper used by Chronos to send commands and queries to the cluster.
+ */
 @Slf4j
 @Getter
 @Service
@@ -37,6 +40,9 @@ public final class RaftTaskClient implements Closeable {
 
     private volatile RaftClient client;
 
+    /**
+     * Initialize or reinitialize the underlying Raft client.
+     */
     @PostConstruct
     public synchronized void init() {
 
@@ -70,6 +76,13 @@ public final class RaftTaskClient implements Closeable {
                 .build();
     }
 
+    /**
+     * Send a mutating command to the Raft state machine.
+     *
+     * @param command the serialized command payload
+     * @return the Raft reply
+     * @throws IOException if the command cannot be sent
+     */
     public RaftClientReply sendCommand(String command) throws IOException {
         try {
             return client.io().send(Message.valueOf(command));
@@ -78,6 +91,13 @@ public final class RaftTaskClient implements Closeable {
         }
     }
 
+    /**
+     * Send a read-only query to the Raft state machine.
+     *
+     * @param query the serialized query payload
+     * @return the Raft reply
+     * @throws IOException if the query cannot be sent
+     */
     public RaftClientReply sendQuery(String query) throws IOException {
         try {
             return client.io().sendReadOnly(Message.valueOf(query));
@@ -106,6 +126,9 @@ public final class RaftTaskClient implements Closeable {
         }
     }
 
+    /**
+     * Close the current Raft client if one is open.
+     */
     @PreDestroy
     public void close() {
         RaftClient oldClient = this.client;

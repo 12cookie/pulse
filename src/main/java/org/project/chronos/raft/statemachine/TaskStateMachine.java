@@ -37,6 +37,9 @@ import static org.project.chronos.constants.MetricConstants.*;
 import static org.project.chronos.constants.ChronosConstants.*;
 import static org.project.chronos.util.CommonUtil.mapObjectToString;
 
+/**
+ * Raft state machine that stores pending tasks, priority tasks, and assigned task state.
+ */
 @Slf4j
 public class TaskStateMachine extends BaseStateMachine {
 

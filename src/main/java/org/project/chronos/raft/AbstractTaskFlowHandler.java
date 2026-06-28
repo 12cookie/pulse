@@ -13,6 +13,9 @@ import java.util.Map;
 import static org.project.chronos.constants.ChronosConstants.DELIMITER;
 import static org.project.chronos.constants.ChronosConstants.retryAfterHeaderKey;
 
+/**
+ * Base implementation for task flow handlers that publish task events to Kafka.
+ */
 @Slf4j
 @RequiredArgsConstructor
 public abstract class AbstractTaskFlowHandler {
@@ -21,6 +24,12 @@ public abstract class AbstractTaskFlowHandler {
 
     private final ChronosProducer<Object> chronosProducer;
 
+    /**
+     * Publish a task back to the retry topic or complete it with failure once retries are exhausted.
+     *
+     * @param assignedTask the assigned task that failed
+     * @param errorMessage the failure reason
+     */
     public void publishFailedTasks(AssignedTask assignedTask, String errorMessage) {
         int resubmissionCount = assignedTask.getTask().getResubmissionCount();
         assignedTask.getTask().getErrorMessage().put(
@@ -46,6 +55,11 @@ public abstract class AbstractTaskFlowHandler {
         log.info("Published failed task successfully for task id: {}", assignedTask.getTask().getTaskId());
     }
 
+    /**
+     * Publish a completed task result to the completion topic.
+     *
+     * @param resultMessage the completed task payload
+     */
     public void publishCompletedTask(ChronosResultMessage resultMessage) {
         chronosProducer.publishKafkaEvent(
                 resultMessage.getTaskId(), resultMessage,

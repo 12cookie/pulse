@@ -27,6 +27,9 @@ import static org.project.chronos.constants.ChronosConstants.*;
 import static org.project.chronos.util.CommonUtil.mapStringToObject;
 import static org.project.chronos.util.CommonUtil.mapStringToTypeReference;
 
+/**
+ * Raft-backed task flow handler implementation.
+ */
 @Slf4j
 @Service
 @ConditionalOnProperty(name = "enable.raft", havingValue = "true")
@@ -40,6 +43,15 @@ public class TaskFlowHandlerRaft extends AbstractTaskFlowHandler implements Task
 
     private final RaftTaskClient raftClient;
 
+    /**
+     * Create a Raft-backed task flow handler.
+     *
+     * @param raftGroup the Raft group configuration
+     * @param raftServer the local Raft server
+     * @param raftClient the Raft client used to send commands and queries
+     * @param envProperty application configuration values
+     * @param chronosProducer producer used for retry and completion events
+     */
     public TaskFlowHandlerRaft(RaftGroup raftGroup, RaftServer raftServer, RaftTaskClient raftClient,
                                EnvProperty envProperty, ChronosProducer<Object> chronosProducer) {
         super(envProperty, chronosProducer);

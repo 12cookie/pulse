@@ -74,7 +74,7 @@ public class EnvProperty {
     @Value("${chronos.process.initiation.topic:CHRONOS.PROCESS.INITIATION.TOPIC}")
     private String chronosProcessInitiationTopic;
 
-    @Value("${chronos.process.priority.topic:CHRONOS.PROCESS.PIORITY.TOPIC}")
+    @Value("${chronos.process.priority.topic:CHRONOS.PROCESS.PRIORITY.TOPIC}")
     private String chronosProcessPriorityTopic;
 
     @Value("${chronos.process.retry.topic:CHRONOS.PROCESS.RETRY.TOPIC-}")
