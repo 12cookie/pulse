@@ -11,23 +11,23 @@ import org.springframework.kafka.support.Acknowledgment;
 import org.springframework.stereotype.Component;
 
 import java.io.IOException;
-import java.util.concurrent.*;
 
-import static org.project.chronos.constants.ChronosConstants.RETRY_LISTENER_ID;
+import static org.project.chronos.constants.ChronosConstants.PRIORITY_RETRY_LISTENER_ID;
 
 @Slf4j
 @Component
 @RequiredArgsConstructor
-public class RetryConsumer {
+public class PriorityRetryConsumer {
 
     private final ChronosTaskManager chronosTaskManager;
 
     @KafkaListener(
-            id = RETRY_LISTENER_ID,
-            topicPattern = "${chronos.process.retry.topic:CHRONOS.PROCESS.RETRY.TOPIC-.*}")
+            id = PRIORITY_RETRY_LISTENER_ID,
+            topicPattern = "${chronos.process.priority.retry.topic:CHRONOS.PROCESS.PRIORITY.RETRY.TOPIC-.*}")
     public void onRetryMessage(ConsumerRecord<String, ChronosTaskMessage> consumerRecord,
                                Acknowledgment acknowledgment) {
-        log.info("Received retry message - key: {}, topic: {}", consumerRecord.key(), consumerRecord.topic());
+
+        log.info("Received priority retry message - key: {}, topic: {}", consumerRecord.key(), consumerRecord.topic());
         try {
             MDC.put("refId", consumerRecord.key());
             chronosTaskManager.addPriorityTaskToQueue(consumerRecord.value());

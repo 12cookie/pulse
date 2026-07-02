@@ -17,25 +17,18 @@ import org.apache.ratis.statemachine.impl.SingleFileSnapshotInfo;
 import org.apache.ratis.util.*;
 import org.jspecify.annotations.NonNull;
 import org.project.chronos.metrics.RaftCustomMetrics;
-import org.project.chronos.model.AssignedTaskWrapper;
 import org.project.chronos.model.AssignedTask;
 import org.project.chronos.model.ChronosTaskMessage;
-import tools.jackson.databind.ObjectMapper;
 
 import java.io.*;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
-import java.util.concurrent.BlockingQueue;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.LinkedBlockingQueue;
+import java.util.*;
+import java.util.concurrent.*;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 import static org.project.chronos.constants.MetricConstants.*;
 import static org.project.chronos.constants.ChronosConstants.*;
 import static org.project.chronos.util.CommonUtil.mapObjectToString;
+import static org.project.chronos.util.CommonUtil.mapStringToObject;
 
 /**
  * Raft state machine that stores pending tasks, priority tasks, and assigned task state.
@@ -49,7 +42,9 @@ public class TaskStateMachine extends BaseStateMachine {
 
     private final BlockingQueue<ChronosTaskMessage> priorityTaskQueue = new LinkedBlockingQueue<>();
 
-    private final ConcurrentHashMap<Long, AssignedTask> assignedTaskMap = new ConcurrentHashMap<>();
+    private final ConcurrentSkipListMap<Long, AssignedTask> assignedTaskMap = new ConcurrentSkipListMap<>();
+
+    private final ConcurrentHashMap<String, Long> indexMap = new ConcurrentHashMap<>();
 
     private final ReentrantReadWriteLock lock = new ReentrantReadWriteLock(true);
 
@@ -98,6 +93,7 @@ public class TaskStateMachine extends BaseStateMachine {
         pendingTaskQueue.clear();
         priorityTaskQueue.clear();
         assignedTaskMap.clear();
+        indexMap.clear();
         setLastAppliedTermIndex(null);
     }
 
@@ -167,25 +163,30 @@ public class TaskStateMachine extends BaseStateMachine {
     public long takeSnapshot() throws IOException {
         final BlockingQueue<ChronosTaskMessage> pendingTaskCopy;
         final BlockingQueue<ChronosTaskMessage> priorityTaskCopy;
-        final ConcurrentHashMap<Long, AssignedTask> assignedTaskCopy;
+        final ConcurrentSkipListMap<Long, AssignedTask> assignedTaskCopy;
+        final ConcurrentHashMap<String, Long> indexMapCopy;
 
         long startTime = System.currentTimeMillis();
         final TermIndex last;
-        try (AutoCloseableLock ignored = readLock()) {
-            pendingTaskCopy = new LinkedBlockingQueue<>(pendingTaskQueue);
-            priorityTaskCopy = new LinkedBlockingQueue<>(priorityTaskQueue);
-            assignedTaskCopy = new ConcurrentHashMap<>(assignedTaskMap);
+        try (AutoCloseableLock _ = readLock()) {
+            pendingTaskCopy = new PriorityBlockingQueue<>(pendingTaskQueue);
+            priorityTaskCopy = new PriorityBlockingQueue<>(priorityTaskQueue);
+            assignedTaskCopy = new ConcurrentSkipListMap<>(assignedTaskMap);
+            indexMapCopy = new ConcurrentHashMap<>(indexMap);
             last = getLastAppliedTermIndex();
         }
 
         final File snapshotFile = storage.getSnapshotFile(last.getTerm(), last.getIndex());
         log.info("Taking a snapshot to file {}", snapshotFile);
-        try (ObjectOutputStream out = new ObjectOutputStream(new BufferedOutputStream(FileUtils.newOutputStream(snapshotFile)))) {
+        try (ObjectOutputStream out = new ObjectOutputStream(
+                new BufferedOutputStream(
+                        FileUtils.newOutputStream(snapshotFile)))) {
             out.writeInt(CURRENT_VERSION);
             log.info("Snapshot version during write: {}", CURRENT_VERSION);
             out.writeObject(pendingTaskCopy);
             out.writeObject(priorityTaskCopy);
             out.writeObject(assignedTaskCopy);
+            out.writeObject(indexMapCopy);
         } catch (IOException ioe) {
             raftCustomMetrics.count(RAFT_TAKE_SNAPSHOT_FAILURE, RAFT_TAKE_SNAPSHOT_FAILURE_DESC);
             log.error("Failed to write snapshot file {}, last applied index = {}", snapshotFile, last);
@@ -195,7 +196,6 @@ public class TaskStateMachine extends BaseStateMachine {
         final MD5Hash md5 = MD5FileUtil.computeAndSaveMd5ForFile(snapshotFile);
         final FileInfo info = new FileInfo(snapshotFile.toPath(), md5);
         storage.updateLatestSnapshot(new SingleFileSnapshotInfo(info, last));
-        raftCustomMetrics.count(RAFT_TAKE_SNAPSHOT_SUCCESS, RAFT_TAKE_SNAPSHOT_SUCCESS_DESC);
         log.info("Snapshot taken successfully: {}, last applied index = {}", snapshotFile, last);
         raftCustomMetrics.recordTime(RAFT_TAKE_SNAPSHOT, RAFT_TAKE_SNAPSHOT_DESC, startTime);
         return last.getIndex();
@@ -213,7 +213,6 @@ public class TaskStateMachine extends BaseStateMachine {
      * @throws IOException if reading the snapshot file fails or verifying MD5 fails
      */
     public void loadSnapshot(SingleFileSnapshotInfo snapshot) throws IOException {
-
         if (snapshot == null) {
             log.warn("The snapshot info is null.");
             return;
@@ -241,6 +240,7 @@ public class TaskStateMachine extends BaseStateMachine {
             pendingTaskQueue.addAll(JavaUtils.cast(in.readObject()));
             priorityTaskQueue.addAll(JavaUtils.cast(in.readObject()));
             assignedTaskMap.putAll(JavaUtils.cast(in.readObject()));
+            indexMap.putAll(JavaUtils.cast(in.readObject()));
             log.info("Snapshot loaded successfully from file {}, last applied index = {}", snapshotFile, last);
         } catch (ClassNotFoundException | IOException e) {
             log.error("Failed to load snapshot file {}, last applied index = {}, error: {}", snapshotFile, last, e.getMessage());
@@ -274,31 +274,24 @@ public class TaskStateMachine extends BaseStateMachine {
         long startTime = System.currentTimeMillis();
         String receivedQuery = request.getContent().toStringUtf8();
         String[] parts = receivedQuery.split(COLON, 2);
+        CompletableFuture<Message> queryResult;
         try (AutoCloseableLock ignored = readLock()) {
             log.debug("Received query: {}", receivedQuery);
             switch (parts[0]) {
-                case GET_PENDING_TASK_QUEUE_SIZE: {
-                    int qSize = pendingTaskQueue.size();
-                    raftCustomMetrics.count(RAFT_QUERY_SUCCESS, RAFT_QUERY_SUCCESS_DESC, String.format(QUERY_FORMATTER, receivedQuery));
-                    return CompletableFuture.completedFuture(Message.valueOf(Integer.toString(qSize)));
-                }
-
-                case GET_PRIORITY_TASK_QUEUE_SIZE: {
-                    int qSize = priorityTaskQueue.size();
-                    raftCustomMetrics.count(RAFT_QUERY_SUCCESS, RAFT_QUERY_SUCCESS_DESC, String.format(QUERY_FORMATTER, receivedQuery));
-                    return CompletableFuture.completedFuture(Message.valueOf(Integer.toString(qSize)));
-                }
-
-                case GET_ASSIGNED_TASK_FROM_MAP: {
-                    return getAssignedTaskFromMap(parts[1], parts[0]);
-                }
+                case GET_PENDING_TASK_QUEUE_SIZE -> queryResult = getQueryResult(pendingTaskQueue);
+                case GET_PRIORITY_TASK_QUEUE_SIZE -> queryResult = getQueryResult(priorityTaskQueue);
+                case GET_ASSIGNED_TASK_FROM_MAP -> queryResult = getAssignedTaskFromMap(parts[1]);
+                default -> queryResult = CompletableFuture.completedFuture(Message.EMPTY);
             }
 
-            raftCustomMetrics.count(RAFT_QUERY_FAILURE, RAFT_QUERY_FAILURE_DESC, String.format(QUERY_FORMATTER, receivedQuery));
-            return CompletableFuture.completedFuture(Message.valueOf(INVALID_QUERY));
+            return queryResult;
         } finally {
             raftCustomMetrics.recordTime(RAFT_QUERY, RAFT_QUERY_DESC, startTime);
         }
+    }
+
+    private <T> CompletableFuture<Message> getQueryResult(Collection<T> collection) {
+        return CompletableFuture.completedFuture(Message.valueOf(Integer.toString(collection.size())));
     }
 
     /**
@@ -314,121 +307,91 @@ public class TaskStateMachine extends BaseStateMachine {
      */
     @Override
     public CompletableFuture<Message> applyTransaction(TransactionContext transactionContext) {
-
-        CompletableFuture<Message> transactionResult;
         long startTime = System.currentTimeMillis();
         final RaftProtos.LogEntryProto entry = transactionContext.getLogEntry();
         String command = entry.getStateMachineLogEntry().getLogData().toStringUtf8();
-        try (AutoCloseableLock ignored = writeLock()) {
+        CompletableFuture<Message> trxResult;
+        try (AutoCloseableLock _ = writeLock()) {
             log.debug("Received command: {}", command);
             String[] parts = command.split(COLON, 2);
             String transactionName = parts[0];
             switch (transactionName) {
-                case ADD_TASK_TO_QUEUE -> transactionResult = addTaskToQueue(parts[1], transactionName);
-                case ADD_PRIORITY_TASK_TO_QUEUE -> transactionResult = addPriorityTaskToQueue(parts[1], transactionName);
-                case GET_PENDING_TASK -> transactionResult = getPendingTask(parts[1], transactionName);
-                case REMOVE_TASK_FROM_MAP -> transactionResult = removeTaskFromMap(Long.valueOf(parts[1]), transactionName);
-                case HANDLE_EXPIRED_TASKS -> transactionResult = enqueueExpiredTask(Long.parseLong(parts[1]), transactionName);
-                default -> {
-                    raftCustomMetrics.count(RAFT_TRANSACTION_FAILURE, RAFT_TRANSACTION_FAILURE_DESC, String.format(COMMAND_FORMATTER, transactionName));
-                    return CompletableFuture.completedFuture(Message.valueOf(INVALID_ACTION));
-                }
+                case ADD_TASK_TO_QUEUE -> trxResult = addTaskToQueue(parts[1]);
+                case ADD_PRIORITY_TASK_TO_QUEUE -> trxResult = addPriorityTaskToQueue(parts[1]);
+                case GET_PENDING_TASK -> trxResult = getPendingTask(parts[1]);
+                case REMOVE_TASK_FROM_MAP -> trxResult = removeTaskFromMap(Long.valueOf(parts[1]));
+                case HANDLE_EXPIRED_TASKS -> trxResult = getExpiredTask(Long.parseLong(parts[1]));
+                default -> trxResult = CompletableFuture.completedFuture(Message.EMPTY);
             }
 
-            return transactionResult;
-        } catch (Exception e) {
-            raftCustomMetrics.count(RAFT_TRANSACTION_FAILURE, RAFT_TRANSACTION_FAILURE_DESC);
-            log.error("Error while executing command: {}, error: {}", command.split(COLON)[0], e.getMessage());
-            log.debug("Error: ", e);
-            return CompletableFuture.completedFuture(Message.valueOf("Error: ".concat(e.getMessage())));
+            return trxResult;
         } finally {
             raftCustomMetrics.recordTime(RAFT_TRANSACTION, RAFT_TRANSACTION_DESC, startTime);
         }
     }
 
-    private @NonNull CompletableFuture<Message> addPriorityTaskToQueue(String task, String transactionName) {
-        ChronosTaskMessage chronosTaskMessage = new ObjectMapper().readValue(task, ChronosTaskMessage.class);
-        priorityTaskQueue.add(chronosTaskMessage);
-        log.debug("Size of pending queue on command {}: {}", transactionName, priorityTaskQueue.size());
-        raftCustomMetrics.count(RAFT_TRANSACTION_SUCCESS, RAFT_TRANSACTION_SUCCESS_DESC, String.format(COMMAND_FORMATTER, transactionName));
-        return CompletableFuture.completedFuture(Message.valueOf(JOB_ADDED_SUCCESSFULLY));
-    }
-
-    private @NonNull CompletableFuture<Message> addTaskToQueue(String task, String transactionName) {
-        ChronosTaskMessage chronosTaskMessage = new ObjectMapper().readValue(task, ChronosTaskMessage.class);
+    private @NonNull CompletableFuture<Message> addTaskToQueue(String task) {
+        ChronosTaskMessage chronosTaskMessage = mapStringToObject(task, ChronosTaskMessage.class);
         pendingTaskQueue.add(chronosTaskMessage);
-        log.debug("Size of pending queue on command {}: {}", ADD_TASK_TO_QUEUE, pendingTaskQueue.size());
-        raftCustomMetrics.count(RAFT_TRANSACTION_SUCCESS, RAFT_TRANSACTION_SUCCESS_DESC, String.format(COMMAND_FORMATTER, transactionName));
-        return CompletableFuture.completedFuture(Message.valueOf(JOB_ADDED_SUCCESSFULLY));
+        log.debug("Size of pending queue: {}", pendingTaskQueue.size());
+        return CompletableFuture.completedFuture(Message.valueOf(TASK_ADDED_SUCCESSFULLY));
     }
 
-    private @NonNull CompletableFuture<Message> getPendingTask(String taskExecutorId, String transactionName) {
+    private @NonNull CompletableFuture<Message> addPriorityTaskToQueue(String task) {
+        ChronosTaskMessage chronosTaskMessage = mapStringToObject(task, ChronosTaskMessage.class);
+        priorityTaskQueue.add(chronosTaskMessage);
+        log.debug("Size of priority queue: {}", priorityTaskQueue.size());
+        return CompletableFuture.completedFuture(Message.valueOf(TASK_ADDED_SUCCESSFULLY));
+    }
+
+    private @NonNull CompletableFuture<Message> getPendingTask(String taskExecutorId) {
+        long startTime = System.currentTimeMillis();
         ChronosTaskMessage task = priorityTaskQueue.poll();
+
         if (Objects.isNull(task)) {
             task = pendingTaskQueue.poll();
         }
 
         if (Objects.isNull(task)) {
-            log.debug("No pending task available on command {}", GET_PENDING_TASK);
-            raftCustomMetrics.count(RAFT_TRANSACTION_SUCCESS, RAFT_TRANSACTION_SUCCESS_DESC, String.format(COMMAND_FORMATTER, transactionName));
+            log.debug("No pending task available");
             return CompletableFuture.completedFuture(Message.valueOf(NO_PENDING_JOB));
-        } else {
-            AssignedTask assignedTask = AssignedTask.builder()
-                    .taskExecutorClientId(taskExecutorId)
-                    .task(task)
-                    .build();
-            long key = System.currentTimeMillis();
-            assignedTaskMap.put(key, assignedTask);
-            String serializedTask = new ObjectMapper().writeValueAsString(task);
-            log.debug("Response on command {}: {}", GET_PENDING_TASK, serializedTask);
-            raftCustomMetrics.count(RAFT_TRANSACTION_SUCCESS, RAFT_TRANSACTION_SUCCESS_DESC, String.format(COMMAND_FORMATTER, transactionName));
-            return CompletableFuture.completedFuture(Message.valueOf(serializedTask));
         }
+
+        AssignedTask assignedTask = AssignedTask.builder()
+                .taskExecutorClientId(taskExecutorId)
+                .task(task)
+                .build();
+        assignedTaskMap.put(startTime, assignedTask);
+        indexMap.put(assignedTask.getTask().getTaskId(), startTime);
+        String serializedTask = mapObjectToString(task);
+        log.debug("Pending task: {}", serializedTask);
+        return CompletableFuture.completedFuture(Message.valueOf(serializedTask));
     }
 
-    private @NonNull CompletableFuture<Message> removeTaskFromMap(Long key, String transactionName) {
+    private @NonNull CompletableFuture<Message> removeTaskFromMap(Long key) {
+        indexMap.remove(assignedTaskMap.get(key).getTask().getTaskId());
         assignedTaskMap.remove(key);
-        log.debug("Size of assigned map on command {}: {}", REMOVE_TASK_FROM_MAP, assignedTaskMap.size());
-        raftCustomMetrics.count(RAFT_TRANSACTION_SUCCESS, RAFT_TRANSACTION_SUCCESS_DESC, String.format(COMMAND_FORMATTER, transactionName));
+        log.debug("Size of assigned map: {}", assignedTaskMap.size());
         return CompletableFuture.completedFuture(Message.valueOf(TASK_REMOVED_SUCCESSFULLY));
     }
 
-    private @NonNull CompletableFuture<Message> enqueueExpiredTask(long taskTimeoutMs, String transactionName) {
-        long currentTimeStamp = System.currentTimeMillis();
-        List<AssignedTask> expiredTasks = new ArrayList<>();
-        assignedTaskMap.entrySet().removeIf(var -> {
-            long timeSinceAssignment = currentTimeStamp - var.getKey();
-            if (timeSinceAssignment > taskTimeoutMs) {
-                log.info("Client timeout for task: {}", var.getValue().getTask().getTaskId());
-                expiredTasks.add(var.getValue());
-                return true;
-            }
-
-            return false;
-        });
-
-        raftCustomMetrics.count(RAFT_TRANSACTION_SUCCESS, RAFT_TRANSACTION_SUCCESS_DESC, String.format(COMMAND_FORMATTER, transactionName));
+    private @NonNull CompletableFuture<Message> getExpiredTask(long taskTimeoutMs) {
+        long expiredKey = System.currentTimeMillis() - taskTimeoutMs;
+        NavigableMap<Long, AssignedTask> expired = assignedTaskMap.headMap(expiredKey);
+        List<AssignedTask> expiredTasks = new ArrayList<>(expired.values());
+        expiredTasks.forEach(t -> indexMap.remove(t.getTask().getTaskId()));
+        expired.clear();
         return CompletableFuture.completedFuture(Message.valueOf(mapObjectToString(expiredTasks)));
     }
 
-    private @NonNull CompletableFuture<Message> getAssignedTaskFromMap(String taskId, String receivedQuery) {
-        Map.Entry<Long, AssignedTask> assignedTaskEntry = null;
-        for (Map.Entry<Long, AssignedTask> mapEntry : assignedTaskMap.entrySet()) {
-            if (Objects.equals(mapEntry.getValue().getTask().getTaskId(), taskId)) {
-                assignedTaskEntry = mapEntry;
-                break;
-            }
-        }
-
-        if (Objects.isNull(assignedTaskEntry)) {
-            raftCustomMetrics.count(RAFT_QUERY_SUCCESS, RAFT_QUERY_SUCCESS_DESC, String.format(QUERY_FORMATTER, receivedQuery));
+    private @NonNull CompletableFuture<Message> getAssignedTaskFromMap(String taskId) {
+        AssignedTask task = assignedTaskMap.get(indexMap.get(taskId));
+        if (Objects.isNull(task)) {
             return CompletableFuture.completedFuture(Message.valueOf(NO_TASK_FOUND_IN_MAP));
         }
 
-        AssignedTaskWrapper wrapper = new AssignedTaskWrapper(assignedTaskEntry);
-        String assignedTask = new ObjectMapper().writeValueAsString(wrapper);
+        String assignedTask = mapObjectToString(new AbstractMap.SimpleEntry<>(indexMap.get(taskId), task));
         log.debug("Response on command {}: {}", GET_ASSIGNED_TASK_FROM_MAP, assignedTask);
-        raftCustomMetrics.count(RAFT_QUERY_SUCCESS, RAFT_QUERY_SUCCESS_DESC, String.format(QUERY_FORMATTER, receivedQuery));
         return CompletableFuture.completedFuture(Message.valueOf(assignedTask));
     }
 
@@ -451,12 +414,16 @@ public class TaskStateMachine extends BaseStateMachine {
         return this.pendingTaskQueue.size();
     }
 
+    public int getPriorityQueueSize() {
+        return this.priorityTaskQueue.size();
+    }
+
     /**
      * Get the current number of jobs in the assigned (processing) map.
      *
      * @return the size of the assigned jobs map
      */
-    public int getProcessingQueueSize() {
+    public int getProcessingTaskMapSize() {
         return this.assignedTaskMap.size();
     }
 }

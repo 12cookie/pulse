@@ -8,7 +8,6 @@ import org.apache.ratis.client.RaftClient;
 import org.apache.ratis.client.RaftClientConfigKeys;
 import org.apache.ratis.conf.RaftProperties;
 import org.apache.ratis.protocol.*;
-import org.apache.ratis.protocol.exceptions.AlreadyClosedException;
 import org.apache.ratis.retry.RetryPolicies;
 import org.apache.ratis.retry.RetryPolicy;
 import org.apache.ratis.util.TimeDuration;
@@ -19,11 +18,11 @@ import org.springframework.stereotype.Service;
 
 import java.io.Closeable;
 import java.io.IOException;
-import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
+import static org.project.chronos.constants.ChronosConstants.COLON;
 import static org.project.chronos.raft.server.RaftTaskServer.RAFT_GROUP_ID;
 
 /**
@@ -46,9 +45,9 @@ public final class RaftTaskClient implements Closeable {
     @PostConstruct
     public synchronized void init() {
 
-        List<RaftPeer> peers = Arrays.stream(envProperty.getRaftPeers().split(","))
+        List<RaftPeer> peers = envProperty.getRaftPeers().stream()
                 .map(p -> {
-                    int colonIndex = p.indexOf(":");
+                    int colonIndex = p.indexOf(COLON);
                     if (colonIndex <= 0 || colonIndex >= p.length() - 1) {
                         throw new IllegalArgumentException(
                                 "Invalid raft peer configuration entry (expected '<id>:<address>'): '" + p + "'");
@@ -103,26 +102,6 @@ public final class RaftTaskClient implements Closeable {
             return client.io().sendReadOnly(Message.valueOf(query));
         } catch (Exception e) {
             throw new IOException("Failed to send query: " + query, e);
-        }
-    }
-
-    @SuppressWarnings("unused")
-    private void handleException(Exception e) throws IOException {
-
-        if (e instanceof AlreadyClosedException) {
-
-            log.warn("RaftClient AlreadyClosedException encountered: {}", e.getMessage());
-            synchronized (this) {
-                log.warn("RaftClient is closed, reinitializing...");
-                init();
-            }
-
-        } else if (e instanceof IOException) {
-            log.error("IOException encountered in RaftClient: {}", e.getMessage());
-            throw (IOException) e;
-
-        } else {
-            log.error("Exception encountered in RaftClient: {}", e.getMessage());
         }
     }
 

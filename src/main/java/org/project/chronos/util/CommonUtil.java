@@ -28,11 +28,11 @@ public class CommonUtil {
     }
 
     public static grpc.chronos.executor.ChronosTask createScrapingTaskRequest(ChronosTaskMessage task) {
-
         return ChronosTask.newBuilder()
                 .setTaskAvailable(true)
                 .setTaskId(task.getTaskId())
                 .setTaskData(task.getChronosTask().getTaskMetadata())
                 .build();
     }
+
 }

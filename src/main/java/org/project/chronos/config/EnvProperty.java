@@ -4,6 +4,8 @@ import lombok.Getter;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Configuration;
 
+import java.util.List;
+
 @Getter
 @Configuration
 public class EnvProperty {
@@ -80,6 +82,9 @@ public class EnvProperty {
     @Value("${chronos.process.retry.topic:CHRONOS.PROCESS.RETRY.TOPIC-}")
     private String chronosProcessRetryTopicPrefix;
 
+    @Value("${chronos.process.priority.retry.topic:CHRONOS.PROCESS.PRIORITY.RETRY.TOPIC-}")
+    private String chronosProcessPriorityRetryTopicPrefix;
+
     @Value("${chronos.process.retry.total:1}")
     private int chronosProcessRetries;
 
@@ -96,7 +101,7 @@ public class EnvProperty {
      * Raft properties
      */
     @Value("${raft.peers:n0:localhost:6000,n1:localhost:6001,n2:localhost:6002}")
-    private String raftPeers;
+    private List<String> raftPeers;
 
     @Value("${task.timeout.ms:10000}")
     private long taskTimeoutMs;
@@ -145,5 +150,4 @@ public class EnvProperty {
 
     @Value("${raft.storage.directory.delete.on-startup:false}")
     private boolean directoryDeletionEnabled;
-
 }

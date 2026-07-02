@@ -51,8 +51,14 @@ public class KafkaTopicConfig implements ChronosConstants {
                 .replicas(envProperty.getNumberOfReplica())
                 .config(TopicConfig.RETENTION_MS_CONFIG, String.valueOf(envProperty.getRetentionPeriodMs()))
                 .build());
+
         for (int i = 0; i < envProperty.getChronosProcessRetries(); i++) {
             newTopicList.add(TopicBuilder.name(envProperty.getChronosProcessRetryTopicPrefix().concat(Integer.toString(i)))
+                    .partitions(envProperty.getNumberOfPartition())
+                    .replicas(envProperty.getNumberOfReplica())
+                    .config(TopicConfig.RETENTION_MS_CONFIG, String.valueOf(envProperty.getRetentionPeriodMs()))
+                    .build());
+            newTopicList.add(TopicBuilder.name(envProperty.getChronosProcessPriorityRetryTopicPrefix().concat(Integer.toString(i)))
                     .partitions(envProperty.getNumberOfPartition())
                     .replicas(envProperty.getNumberOfReplica())
                     .config(TopicConfig.RETENTION_MS_CONFIG, String.valueOf(envProperty.getRetentionPeriodMs()))

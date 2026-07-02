@@ -10,8 +10,6 @@ import org.springframework.kafka.support.SendResult;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
-import java.util.Map;
-import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 
@@ -22,14 +20,8 @@ public class ChronosProducer<T> {
     @Autowired
     private KafkaTemplate<String, Object> kafkaTemplate;
 
-    public void publishKafkaEvent(String key, T eventMessage, String topic, Map<String, String> headers) {
+    public void publishKafkaEvent(String key, T eventMessage, String topic) {
         ProducerRecord<String, Object> producerRecord = buildProducerRecord(key, eventMessage, topic);
-        if (!Objects.isNull(headers) && !headers.isEmpty()) {
-            for (Map.Entry<String, String> header : headers.entrySet()) {
-                producerRecord.headers().add(new RecordHeader(header.getKey(), header.getValue().getBytes()));
-            }
-        }
-
         CompletableFuture<SendResult<String, Object>> future = kafkaTemplate.send(producerRecord);
         try {
             SendResult<String, Object> result = future.get();
@@ -47,4 +39,5 @@ public class ChronosProducer<T> {
         List<Header> recordHeaders = List.of(new RecordHeader("event-source", "scanner".getBytes()));
         return new ProducerRecord<>(topic, null, key, value, recordHeaders);
     }
+
 }

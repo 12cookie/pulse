@@ -29,6 +29,7 @@ import java.util.*;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
+import static org.apache.tomcat.util.http.fileupload.MultipartStream.DASH;
 import static org.project.chronos.constants.ChronosConstants.*;
 
 /**
@@ -60,7 +61,7 @@ public class RaftTaskServer {
             throw new IllegalStateException("Pod name is required for raft server");
         }
 
-        String serverId = PEER_PREFIX.concat(podName.substring(podName.lastIndexOf(HYPHEN) + 1));
+        String serverId = PEER_PREFIX.concat(podName.substring(podName.lastIndexOf(DASH) + 1));
         RaftPeerId currentPeerId = RaftPeerId.valueOf(serverId);
         RaftPeer currentPeer = getCurrentPeer(peers, currentPeerId);
 
@@ -156,7 +157,7 @@ public class RaftTaskServer {
     }
 
     private static @NonNull List<RaftPeer> getRaftPeers(EnvProperty envProperty) {
-        return Arrays.stream(envProperty.getRaftPeers().split(COMMA))
+        return envProperty.getRaftPeers().stream()
                 .map(p -> RaftPeer.newBuilder()
                         .setId(p.substring(0, p.indexOf(COLON)))
                         .setAddress(p.substring(p.indexOf(COLON) + 1))

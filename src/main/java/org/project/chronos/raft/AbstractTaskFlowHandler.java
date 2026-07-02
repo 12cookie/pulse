@@ -7,11 +7,7 @@ import org.project.chronos.kafka.ChronosProducer;
 import org.project.chronos.model.AssignedTask;
 import org.project.chronos.model.ChronosResultMessage;
 
-import java.util.HashMap;
-import java.util.Map;
-
 import static org.project.chronos.constants.ChronosConstants.DELIMITER;
-import static org.project.chronos.constants.ChronosConstants.retryAfterHeaderKey;
 
 /**
  * Base implementation for task flow handlers that publish task events to Kafka.
@@ -46,12 +42,8 @@ public abstract class AbstractTaskFlowHandler {
 
         assignedTask.getTask().setResubmissionCount(resubmissionCount + 1);
         chronosProducer.publishKafkaEvent(
-                assignedTask.getTask().getTaskId(),
-                assignedTask.getTask(),
-                envProperty.getChronosProcessRetryTopicPrefix().concat(String.valueOf(resubmissionCount)),
-                new HashMap<>(Map.of(
-                        retryAfterHeaderKey,
-                        Long.toString(System.currentTimeMillis() + envProperty.getChronosProcessRetryIntervalMs()))));
+                assignedTask.getTask().getTaskId(), assignedTask.getTask(),
+                envProperty.getChronosProcessRetryTopicPrefix().concat(String.valueOf(resubmissionCount)));
         log.info("Published failed task successfully for task id: {}", assignedTask.getTask().getTaskId());
     }
 
@@ -63,7 +55,7 @@ public abstract class AbstractTaskFlowHandler {
     public void publishCompletedTask(ChronosResultMessage resultMessage) {
         chronosProducer.publishKafkaEvent(
                 resultMessage.getTaskId(), resultMessage,
-                envProperty.getChronosProcessCompletionTopic(), null);
+                envProperty.getChronosProcessCompletionTopic());
         log.info("Published completed task for task id: {}", resultMessage.getTaskId());
     }
 }

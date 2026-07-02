@@ -7,7 +7,6 @@ import org.apache.ratis.server.RaftServer;
 import org.project.chronos.config.EnvProperty;
 import org.project.chronos.kafka.ChronosProducer;
 import org.project.chronos.model.AssignedTask;
-import org.project.chronos.model.AssignedTaskWrapper;
 import org.project.chronos.model.ChronosTaskMessage;
 import org.project.chronos.raft.AbstractTaskFlowHandler;
 import org.project.chronos.raft.TaskFlowHandler;
@@ -19,9 +18,7 @@ import org.springframework.stereotype.Service;
 import tools.jackson.core.type.TypeReference;
 
 import java.io.IOException;
-import java.util.List;
-import java.util.Objects;
-import java.util.Optional;
+import java.util.*;
 
 import static org.project.chronos.constants.ChronosConstants.*;
 import static org.project.chronos.util.CommonUtil.mapStringToObject;
@@ -46,10 +43,10 @@ public class TaskFlowHandlerRaft extends AbstractTaskFlowHandler implements Task
     /**
      * Create a Raft-backed task flow handler.
      *
-     * @param raftGroup the Raft group configuration
-     * @param raftServer the local Raft server
-     * @param raftClient the Raft client used to send commands and queries
-     * @param envProperty application configuration values
+     * @param raftGroup       the Raft group configuration
+     * @param raftServer      the local Raft server
+     * @param raftClient      the Raft client used to send commands and queries
+     * @param envProperty     application configuration values
      * @param chronosProducer producer used for retry and completion events
      */
     public TaskFlowHandlerRaft(RaftGroup raftGroup, RaftServer raftServer, RaftTaskClient raftClient,
@@ -63,16 +60,16 @@ public class TaskFlowHandlerRaft extends AbstractTaskFlowHandler implements Task
 
     @Override
     public void addTaskToQueue(ChronosTaskMessage chronosTaskMessage) throws IOException {
-        String jobListString = CommonUtil.mapObjectToString(chronosTaskMessage);
-        RaftClientReply reply = raftClient.sendCommand(ADD_TASK_TO_QUEUE.concat(COLON).concat(jobListString));
-        log.info("Reply for command {}: {}", ADD_TASK_TO_QUEUE, reply.getMessage().getContent().toStringUtf8());
+        String serializedTask = CommonUtil.mapObjectToString(chronosTaskMessage);
+        RaftClientReply reply = raftClient.sendCommand(ADD_TASK_TO_QUEUE.concat(COLON).concat(serializedTask));
+        log.info("Reply for command ADD_TASK_TO_QUEUE: {}", reply.getMessage().getContent().toStringUtf8());
     }
 
     @Override
     public void addPriorityTaskToQueue(ChronosTaskMessage chronosTaskMessage) throws IOException {
-        String jobListString = CommonUtil.mapObjectToString(chronosTaskMessage);
-        RaftClientReply reply = raftClient.sendCommand(ADD_PRIORITY_TASK_TO_QUEUE.concat(COLON).concat(jobListString));
-        log.info("Reply for command {}: {}", ADD_PRIORITY_TASK_TO_QUEUE, reply.getMessage().getContent().toStringUtf8());
+        String serializedTask = CommonUtil.mapObjectToString(chronosTaskMessage);
+        RaftClientReply reply = raftClient.sendCommand(ADD_PRIORITY_TASK_TO_QUEUE.concat(COLON).concat(serializedTask));
+        log.info("Reply for command ADD_PRIORITY_TASK_TO_QUEUE: {}", reply.getMessage().getContent().toStringUtf8());
     }
 
     @Override
@@ -81,13 +78,14 @@ public class TaskFlowHandlerRaft extends AbstractTaskFlowHandler implements Task
             RaftClientReply reply = raftClient.sendCommand(GET_PENDING_TASK.concat(COLON).concat(taskExecutorClientId));
             String commandResponse = reply.getMessage().getContent().toStringUtf8();
             log.info("Reply for command {}: {}", GET_PENDING_TASK, commandResponse);
+            if (Objects.equals(commandResponse, NO_PENDING_JOB)) {
+                return Optional.empty();
+            }
 
-            if (Objects.equals(commandResponse, NO_PENDING_JOB)) return Optional.empty();
             ChronosTaskMessage chronosTaskMessage = mapStringToObject(
                     commandResponse,
                     ChronosTaskMessage.class);
             return Optional.of(chronosTaskMessage);
-
         } catch (IOException ex) {
             log.error("Error while getting job through state machine: {}", ex.getLocalizedMessage());
             return Optional.empty();
@@ -95,17 +93,20 @@ public class TaskFlowHandlerRaft extends AbstractTaskFlowHandler implements Task
     }
 
     @Override
-    public Optional<AssignedTaskWrapper> getAssignedTask(String taskId) {
+    public Optional<AbstractMap.SimpleEntry<Long, AssignedTask>> getAssignedTask(String taskId) {
         String query = GET_ASSIGNED_TASK_FROM_MAP.concat(COLON).concat(taskId);
         try {
             RaftClientReply reply = raftClient.sendQuery(query);
-            String commandResponse = reply.getMessage().getContent().toStringUtf8();
-            log.info("Reply for query {}: {}", GET_ASSIGNED_TASK_FROM_MAP, commandResponse);
-            if (Objects.equals(commandResponse, NO_TASK_FOUND_IN_MAP)) {
+            String queryResponse = reply.getMessage().getContent().toStringUtf8();
+            log.info("Reply for query {}: {}", GET_ASSIGNED_TASK_FROM_MAP, queryResponse);
+            if (Objects.equals(queryResponse, NO_TASK_FOUND_IN_MAP)) {
                 return Optional.empty();
             }
 
-            return Optional.of(mapStringToObject(commandResponse, AssignedTaskWrapper.class));
+            return Optional.of(mapStringToTypeReference(
+                    queryResponse,
+                    new TypeReference<>() {
+                    }));
         } catch (IOException ex) {
             log.error("Error while getting job by refId through state machine: {}", ex.getLocalizedMessage());
             return Optional.empty();
@@ -163,11 +164,9 @@ public class TaskFlowHandlerRaft extends AbstractTaskFlowHandler implements Task
             RaftClientReply reply = raftClient.sendCommand(command);
             List<AssignedTask> expiredTasks = mapStringToTypeReference(
                     reply.getMessage().getContent().toStringUtf8(),
-                    new TypeReference<>() {});
-            for (AssignedTask assignedTask : expiredTasks) {
-                publishFailedTasks(assignedTask, "Task expired");
-            }
-
+                    new TypeReference<>() {
+                    });
+            expiredTasks.forEach(task -> publishFailedTasks(task, "Task expired"));
             log.info("Total expired task: {}", expiredTasks.size());
         } catch (IOException e) {
             log.warn("Error while handling expired task: {}", e.getMessage());
@@ -187,3 +186,4 @@ public class TaskFlowHandlerRaft extends AbstractTaskFlowHandler implements Task
         }
     }
 }
+

@@ -8,16 +8,14 @@ import io.grpc.Status;
 import io.grpc.StatusRuntimeException;
 import io.micrometer.common.util.StringUtils;
 import lombok.extern.slf4j.Slf4j;
-import org.project.chronos.model.AssignedTask;
-import org.project.chronos.model.AssignedTaskWrapper;
-import org.project.chronos.model.ChronosResultMessage;
-import org.project.chronos.model.ChronosTaskMessage;
+import org.project.chronos.model.*;
 import org.project.chronos.raft.TaskFlowHandler;
 import org.project.chronos.util.CommonUtil;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.io.IOException;
+import java.util.AbstractMap;
 import java.util.Optional;
 
 import static org.project.chronos.constants.ChronosConstants.TASK_RESULT_ACK_FORMATTER;
@@ -31,13 +29,13 @@ public class ChronosTaskManagerImpl implements ChronosTaskManager {
 
     @Override
     public void addTaskToQueue(ChronosTaskMessage requestMessage) throws IOException {
-        log.info("Received scraping request!!");
+        log.info("Received request!!");
         taskFlowHandler.addTaskToQueue(requestMessage);
     }
 
     @Override
     public void addPriorityTaskToQueue(ChronosTaskMessage requestMessage) throws IOException {
-        log.info("Received scraping request!!");
+        log.info("Received priority request!!");
         taskFlowHandler.addPriorityTaskToQueue(requestMessage);
     }
 
@@ -56,14 +54,14 @@ public class ChronosTaskManagerImpl implements ChronosTaskManager {
 
     @Override
     public ResultAcknowledgment submitTaskResult(ResultSubmissionRequest chronosTaskResult) {
-        Optional<AssignedTaskWrapper> task = taskFlowHandler.getAssignedTask(chronosTaskResult.getTaskId());
+        Optional<AbstractMap.SimpleEntry<Long, AssignedTask>> task = taskFlowHandler.getAssignedTask(chronosTaskResult.getTaskId());
         if (task.isEmpty()) {
             return ResultAcknowledgment.newBuilder()
                     .setMessage("No task found for taskId: " + chronosTaskResult.getTaskId())
                     .build();
         }
 
-        AssignedTask assignedTask = task.get().getAssignedTaskEntry().getValue();
+        AssignedTask assignedTask = task.get().getValue();
         if (!chronosTaskResult.getSuccess()) {
             taskFlowHandler.publishFailedTasks(assignedTask, chronosTaskResult.getErrorMessage());
         } else {
@@ -71,12 +69,12 @@ public class ChronosTaskManagerImpl implements ChronosTaskManager {
                     .taskId(chronosTaskResult.getTaskId())
                     .success(true)
                     .taskResult(chronosTaskResult.getResultData())
-                    .taskExecutorId(task.get().getAssignedTaskEntry().getValue().getTaskExecutorClientId())
+                    .taskExecutorId(task.get().getValue().getTaskExecutorClientId())
                     .errorMessage(assignedTask.getTask().getErrorMessage())
                     .build());
         }
 
-        taskFlowHandler.removeTaskFromMap(task.get().getAssignedTaskEntry().getKey());
+        taskFlowHandler.removeTaskFromMap(task.get().getKey());
         return ResultAcknowledgment.newBuilder()
                 .setMessage(String.format(TASK_RESULT_ACK_FORMATTER, assignedTask.getTask().getTaskId()))
                 .build();

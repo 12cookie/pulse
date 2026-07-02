@@ -1,11 +1,9 @@
 package org.project.chronos.raft;
 
-import org.project.chronos.model.AssignedTask;
-import org.project.chronos.model.AssignedTaskWrapper;
-import org.project.chronos.model.ChronosResultMessage;
-import org.project.chronos.model.ChronosTaskMessage;
+import org.project.chronos.model.*;
 
 import java.io.IOException;
+import java.util.AbstractMap;
 import java.util.Optional;
 
 /**
@@ -43,7 +41,7 @@ public interface TaskFlowHandler {
      * @param taskId the task identifier
      * @return the assigned task wrapper if present
      */
-    Optional<AssignedTaskWrapper> getAssignedTask(String taskId);
+    Optional<AbstractMap.SimpleEntry<Long, AssignedTask>> getAssignedTask(String taskId);
 
     /**
      * Remove a task from the assigned-task map.

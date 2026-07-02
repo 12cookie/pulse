@@ -19,11 +19,14 @@ public class RaftCustomMetrics extends AbstractMetrics {
 
     public void registerStateMachineGauges(TaskStateMachine stateMachine) {
 
-        Gauge.builder("raft_pending_jobs".concat(gaugePostFix), stateMachine::getPendingQueueSize)
-                .description("Number of pending jobs in the Job State Machine")
+        Gauge.builder("raft_pending_tasks".concat(gaugePostFix), stateMachine::getPendingQueueSize)
+                .description("Number of pending tasks in the task State Machine")
                 .register(meterRegistry);
-        Gauge.builder("raft_processing_jobs".concat(gaugePostFix), stateMachine::getProcessingQueueSize)
-                .description("Number of processing jobs in the Job State Machine")
+        Gauge.builder("raft_priority_tasks".concat(gaugePostFix), stateMachine::getPriorityQueueSize)
+                .description("Number of priority tasks in the task State Machine")
+                .register(meterRegistry);
+        Gauge.builder("raft_processing_tasks".concat(gaugePostFix), stateMachine::getProcessingTaskMapSize)
+                .description("Number of processing tasks in the task State Machine")
                 .register(meterRegistry);
     }
 }
