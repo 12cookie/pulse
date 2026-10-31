@@ -2,7 +2,6 @@ package org.project.chronos.raft.statemachine;
 
 import lombok.extern.slf4j.Slf4j;
 import org.apache.ratis.io.MD5Hash;
-import org.apache.ratis.proto.RaftProtos;
 import org.apache.ratis.protocol.Message;
 import org.apache.ratis.protocol.RaftGroupId;
 import org.apache.ratis.server.RaftServer;
@@ -271,27 +270,26 @@ public class TaskStateMachine extends BaseStateMachine {
      */
     @Override
     public CompletableFuture<Message> query(Message request) {
-        long startTime = System.currentTimeMillis();
-        String receivedQuery = request.getContent().toStringUtf8();
-        String[] parts = receivedQuery.split(COLON, 2);
-        CompletableFuture<Message> queryResult;
-        try (AutoCloseableLock ignored = readLock()) {
-            log.debug("Received query: {}", receivedQuery);
-            switch (parts[0]) {
-                case GET_PENDING_TASK_QUEUE_SIZE -> queryResult = getQueryResult(pendingTaskQueue);
-                case GET_PRIORITY_TASK_QUEUE_SIZE -> queryResult = getQueryResult(priorityTaskQueue);
-                case GET_ASSIGNED_TASK_FROM_MAP -> queryResult = getAssignedTaskFromMap(parts[1]);
-                default -> queryResult = CompletableFuture.completedFuture(Message.EMPTY);
-            }
+        return super.query(request).thenApply(reply -> {
+            String receivedQuery = reply.getContent().toStringUtf8();
+            String[] parts = receivedQuery.split(COLON, 2);
+            Message queryResult;
+            try (AutoCloseableLock ignored = readLock()) {
+                log.debug("Received query: {}", receivedQuery);
+                switch (parts[0]) {
+                    case GET_PENDING_TASK_QUEUE_SIZE -> queryResult = getQueryResult(pendingTaskQueue);
+                    case GET_PRIORITY_TASK_QUEUE_SIZE -> queryResult = getQueryResult(priorityTaskQueue);
+                    case GET_ASSIGNED_TASK_FROM_MAP -> queryResult = getAssignedTaskFromMap(parts[1]);
+                    default -> queryResult = Message.EMPTY;
+                }
 
-            return queryResult;
-        } finally {
-            raftCustomMetrics.recordTime(RAFT_QUERY, RAFT_QUERY_DESC, startTime);
-        }
+                return queryResult;
+            }
+        });
     }
 
-    private <T> CompletableFuture<Message> getQueryResult(Collection<T> collection) {
-        return CompletableFuture.completedFuture(Message.valueOf(Integer.toString(collection.size())));
+    private <T> Message getQueryResult(Collection<T> collection) {
+        return Message.valueOf(Integer.toString(collection.size()));
     }
 
     /**
@@ -307,44 +305,42 @@ public class TaskStateMachine extends BaseStateMachine {
      */
     @Override
     public CompletableFuture<Message> applyTransaction(TransactionContext transactionContext) {
-        long startTime = System.currentTimeMillis();
-        final RaftProtos.LogEntryProto entry = transactionContext.getLogEntry();
-        String command = entry.getStateMachineLogEntry().getLogData().toStringUtf8();
-        CompletableFuture<Message> trxResult;
-        try (AutoCloseableLock _ = writeLock()) {
-            log.debug("Received command: {}", command);
-            String[] parts = command.split(COLON, 2);
-            String transactionName = parts[0];
-            switch (transactionName) {
-                case ADD_TASK_TO_QUEUE -> trxResult = addTaskToQueue(parts[1]);
-                case ADD_PRIORITY_TASK_TO_QUEUE -> trxResult = addPriorityTaskToQueue(parts[1]);
-                case GET_PENDING_TASK -> trxResult = getPendingTask(parts[1]);
-                case REMOVE_TASK_FROM_MAP -> trxResult = removeTaskFromMap(Long.valueOf(parts[1]));
-                case HANDLE_EXPIRED_TASKS -> trxResult = getExpiredTask(Long.parseLong(parts[1]));
-                default -> trxResult = CompletableFuture.completedFuture(Message.EMPTY);
+        return super.applyTransaction(transactionContext).thenApply(reply -> {
+            String command = reply.getContent().toStringUtf8();
+            Message result;
+            try (AutoCloseableLock _ = writeLock()) {
+                log.debug("Received command: {}", command);
+                String[] parts = command.split(COLON, 2);
+                String transactionName = parts[0];
+                switch (transactionName) {
+                    case ADD_TASK_TO_QUEUE -> result = addTaskToQueue(parts[1]);
+                    case ADD_PRIORITY_TASK_TO_QUEUE -> result = addPriorityTaskToQueue(parts[1]);
+                    case GET_PENDING_TASK -> result = getPendingTask(parts[1]);
+                    case REMOVE_TASK_FROM_MAP -> result = removeTaskFromMap(Long.valueOf(parts[1]));
+                    case HANDLE_EXPIRED_TASKS -> result = getExpiredTask(Long.parseLong(parts[1]));
+                    default -> result = Message.EMPTY;
+                }
             }
 
-            return trxResult;
-        } finally {
-            raftCustomMetrics.recordTime(RAFT_TRANSACTION, RAFT_TRANSACTION_DESC, startTime);
-        }
+            return result;
+        });
     }
 
-    private @NonNull CompletableFuture<Message> addTaskToQueue(String task) {
+    private @NonNull Message addTaskToQueue(String task) {
         ChronosTaskMessage chronosTaskMessage = mapStringToObject(task, ChronosTaskMessage.class);
         pendingTaskQueue.add(chronosTaskMessage);
         log.debug("Size of pending queue: {}", pendingTaskQueue.size());
-        return CompletableFuture.completedFuture(Message.valueOf(TASK_ADDED_SUCCESSFULLY));
+        return Message.valueOf(TASK_ADDED_SUCCESSFULLY);
     }
 
-    private @NonNull CompletableFuture<Message> addPriorityTaskToQueue(String task) {
+    private @NonNull Message addPriorityTaskToQueue(String task) {
         ChronosTaskMessage chronosTaskMessage = mapStringToObject(task, ChronosTaskMessage.class);
         priorityTaskQueue.add(chronosTaskMessage);
         log.debug("Size of priority queue: {}", priorityTaskQueue.size());
-        return CompletableFuture.completedFuture(Message.valueOf(TASK_ADDED_SUCCESSFULLY));
+        return Message.valueOf(TASK_ADDED_SUCCESSFULLY);
     }
 
-    private @NonNull CompletableFuture<Message> getPendingTask(String taskExecutorId) {
+    private @NonNull Message getPendingTask(String taskExecutorId) {
         long startTime = System.currentTimeMillis();
         ChronosTaskMessage task = priorityTaskQueue.poll();
 
@@ -354,7 +350,7 @@ public class TaskStateMachine extends BaseStateMachine {
 
         if (Objects.isNull(task)) {
             log.debug("No pending task available");
-            return CompletableFuture.completedFuture(Message.valueOf(NO_PENDING_JOB));
+            return Message.valueOf(NO_PENDING_JOB);
         }
 
         AssignedTask assignedTask = AssignedTask.builder()
@@ -365,34 +361,34 @@ public class TaskStateMachine extends BaseStateMachine {
         indexMap.put(assignedTask.getTask().getTaskId(), startTime);
         String serializedTask = mapObjectToString(task);
         log.debug("Pending task: {}", serializedTask);
-        return CompletableFuture.completedFuture(Message.valueOf(serializedTask));
+        return Message.valueOf(serializedTask);
     }
 
-    private @NonNull CompletableFuture<Message> removeTaskFromMap(Long key) {
+    private @NonNull Message removeTaskFromMap(Long key) {
         indexMap.remove(assignedTaskMap.get(key).getTask().getTaskId());
         assignedTaskMap.remove(key);
         log.debug("Size of assigned map: {}", assignedTaskMap.size());
-        return CompletableFuture.completedFuture(Message.valueOf(TASK_REMOVED_SUCCESSFULLY));
+        return Message.valueOf(TASK_REMOVED_SUCCESSFULLY);
     }
 
-    private @NonNull CompletableFuture<Message> getExpiredTask(long taskTimeoutMs) {
+    private @NonNull Message getExpiredTask(long taskTimeoutMs) {
         long expiredKey = System.currentTimeMillis() - taskTimeoutMs;
         NavigableMap<Long, AssignedTask> expired = assignedTaskMap.headMap(expiredKey);
         List<AssignedTask> expiredTasks = new ArrayList<>(expired.values());
         expiredTasks.forEach(t -> indexMap.remove(t.getTask().getTaskId()));
         expired.clear();
-        return CompletableFuture.completedFuture(Message.valueOf(mapObjectToString(expiredTasks)));
+        return Message.valueOf(mapObjectToString(expiredTasks));
     }
 
-    private @NonNull CompletableFuture<Message> getAssignedTaskFromMap(String taskId) {
+    private @NonNull Message getAssignedTaskFromMap(String taskId) {
         AssignedTask task = assignedTaskMap.get(indexMap.get(taskId));
         if (Objects.isNull(task)) {
-            return CompletableFuture.completedFuture(Message.valueOf(NO_TASK_FOUND_IN_MAP));
+            return Message.valueOf(NO_TASK_FOUND_IN_MAP);
         }
 
         String assignedTask = mapObjectToString(new AbstractMap.SimpleEntry<>(indexMap.get(taskId), task));
         log.debug("Response on command {}: {}", GET_ASSIGNED_TASK_FROM_MAP, assignedTask);
-        return CompletableFuture.completedFuture(Message.valueOf(assignedTask));
+        return Message.valueOf(assignedTask);
     }
 
     /**
